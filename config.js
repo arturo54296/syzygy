@@ -1,14 +1,11 @@
-// Firebase web config (Firebase console → Project settings → Your apps → Web app → "Config").
+// Firebase web config (Firebase console → Project settings → Your apps → Web app).
 // These values are public by design; the Firestore rules in firestore.rules are what protect the data.
-// While this is null the app runs in DEMO mode: data is saved only in this browser.
-export const firebaseConfig = null;
-
-// Example:
-// export const firebaseConfig = {
-//   apiKey: "AIza...",
-//   authDomain: "your-project.firebaseapp.com",
-//   projectId: "your-project",
-//   storageBucket: "your-project.appspot.com",
-//   messagingSenderId: "123456789",
-//   appId: "1:123456789:web:abc123",
-// };
+// Set this to null to run in DEMO mode (data saved only in this browser).
+export const firebaseConfig = {
+  apiKey: "AIzaSyBlv9wNZz9UQ-kzVB3pxnMmHW08sh82MHg",
+  authDomain: "syzygy-99214.firebaseapp.com",
+  projectId: "syzygy-99214",
+  storageBucket: "syzygy-99214.firebasestorage.app",
+  messagingSenderId: "951181855141",
+  appId: "1:951181855141:web:99d03a85e04b19999ac04c",
+};
