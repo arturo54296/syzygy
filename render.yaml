@@ -1,0 +1,10 @@
+services:
+  - type: web
+    runtime: static
+    name: together
+    buildCommand: ""
+    staticPublishPath: .
+    headers:
+      - path: /*
+        name: X-Robots-Tag
+        value: noindex, nofollow

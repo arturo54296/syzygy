@@ -1,0 +1,10 @@
+rules_version = '2';
+// No login. Data lives under spaces/{key}, where key is the long random code in the shared link.
+// Nobody can list the spaces, so only people who have the link can read or write.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /spaces/{key}/{coll}/{id} {
+      allow read, write: if key.size() >= 16 && coll in ['events', 'activities', 'meta'];
+    }
+  }
+}

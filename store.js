@@ -1,0 +1,68 @@
+// Data layer. Firestore when config.js has a config, otherwise a demo store in localStorage
+// (synced live between tabs of the same browser, handy for testing both people side by side).
+import { firebaseConfig } from './config.js';
+
+const FIREBASE_VERSION = '10.12.2';
+const COLLS = ['events', 'activities'];
+
+/** Random space key for the shared link (18 chars from a 32-letter alphabet ≈ 90 bits). */
+export function makeKey() {
+  const abc = 'abcdefghijkmnpqrstuvwxyz23456789', a = new Uint8Array(18);
+  crypto.getRandomValues(a);
+  return [...a].map(b => abc[b % 32]).join('');
+}
+
+const clean = o => JSON.parse(JSON.stringify(o));  // drops undefined (Firestore rejects it)
+
+export async function openStore(key, onData, onError) {
+  const data = { events: [], activities: [] }, ready = { events: false, activities: false };
+  const emit = () => { if (ready.events && ready.activities) onData({ events: [...data.events], activities: [...data.activities] }); };
+
+  if (!firebaseConfig) {
+    const LK = 'tp.demo.' + key;
+    const load = () => { try { return JSON.parse(localStorage.getItem(LK)) || {}; } catch { return {}; } };
+    const read = () => { const db = load(); for (const c of COLLS) { data[c] = Object.values(db[c] || {}); ready[c] = true; } emit(); };
+    const bc = 'BroadcastChannel' in window ? new BroadcastChannel(LK) : null;
+    if (bc) bc.onmessage = read;
+    const write = fn => { const db = load(); fn(db); localStorage.setItem(LK, JSON.stringify(db)); bc?.postMessage(1); read(); };
+    return {
+      mode: 'demo',
+      start: read,
+      put: async (c, o) => write(db => { (db[c] ||= {})[o.id] = clean(o); }),
+      del: async (c, id) => write(db => { if (db[c]) delete db[c][id]; }),
+      seed: async list => {
+        if (load().meta?.seeded) return;
+        write(db => { db.activities ||= {}; for (const a of list) db.activities[a.id] ||= clean(a); (db.meta ||= {}).seeded = true; });
+      },
+    };
+  }
+
+  const base = `https://www.gstatic.com/firebasejs/${FIREBASE_VERSION}/`;
+  const { initializeApp } = await import(base + 'firebase-app.js');
+  const F = await import(base + 'firebase-firestore.js');
+  const app = initializeApp(firebaseConfig);
+  let db;
+  try { db = F.initializeFirestore(app, { localCache: F.persistentLocalCache({ tabManager: F.persistentMultipleTabManager() }) }); }
+  catch { db = F.getFirestore(app); }
+  const ref = (c, id) => F.doc(db, 'spaces', key, c, id);
+  return {
+    mode: 'live',
+    start: () => {
+      for (const c of COLLS) F.onSnapshot(F.collection(db, 'spaces', key, c), snap => {
+        data[c] = snap.docs.map(d => ({ ...d.data(), id: d.id })); ready[c] = true; emit();
+      }, onError);
+    },
+    put: (c, o) => F.setDoc(ref(c, o.id), clean(o)).catch(onError),
+    del: (c, id) => F.deleteDoc(ref(c, id)).catch(onError),
+    seed: async list => {
+      try {
+        const m = await F.getDoc(ref('meta', 'seed'));
+        if (m.exists()) return;
+        const b = F.writeBatch(db);
+        for (const a of list) b.set(ref('activities', a.id), clean(a));
+        b.set(ref('meta', 'seed'), { at: Date.now() });
+        await b.commit();
+      } catch (e) { onError(e); }
+    },
+  };
+}
