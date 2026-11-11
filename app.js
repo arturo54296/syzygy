@@ -1,6 +1,6 @@
-import { openStore, makeKey } from './store.js?v=22';
-import { SEED, SEED_VERSION } from './activities.js?v=22';
-import * as G from './gcal.js?v=22';
+import { openStore, makeKey } from './store.js?v=23';
+import { SEED, SEED_VERSION } from './activities.js?v=23';
+import * as G from './gcal.js?v=23';
 
 const MIN = 60e3, HOUR = 36e5, DAY = 864e5, SNAP = 15 * MIN;
 const PEOPLE = { arturo: { name: 'Arturo', css: '--arturo' }, zosia: { name: 'Zosia', css: '--zosia' } };
@@ -1148,7 +1148,11 @@ function lockScreen(reason) {
 async function boot(fresh = false) {
   const fromHash = (location.hash.match(/k=([a-z0-9]+)/i) || [])[1];
   const key = fromHash || LS.get('key', null);   // a device that opened the full link once remembers its key
-  if (location.hash === '#new') {   // hidden: make a brand-new calendar (only via ".../#new")
+  // Creating a new calendar is switched OFF on purpose: there is one shared calendar (ours) and we'll never need
+  // another. The code is kept in case that ever changes; to turn it back on, set ALLOW_NEW_CALENDAR to true
+  // and open the site with "#new" at the end.
+  const ALLOW_NEW_CALENDAR = false;
+  if (ALLOW_NEW_CALENDAR && location.hash === '#new') {
     dialog('🪐 New shared calendar', [
       el('p', {}, 'This creates a new, empty shared calendar with its own secret link.'),
       el('div', { class: 'actions' }, el('span', { class: 'spacer' }), el('button', { class: 'primary', onclick: () => {

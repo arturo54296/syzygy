@@ -16,7 +16,7 @@ It's a static site with no backend: the data lives in Firebase Firestore, and th
 - 📊 **Stats**: how many times you've done each activity and when you last did it, plus the ideas you haven't tried yet.
 
 ## The secret link
-The app only opens with the full link, which ends in `#k=<key>`, or on a device that has opened that link before (each device remembers the key). Without a key, or with a wrong one, the whole page is replaced by a "Ask Arturo for the link" message, and nothing is read or created. To make a brand-new calendar, open the site with `#new` at the end.
+The app only opens with the full link, which ends in `#k=<key>`, or on a device that has opened that link before (each device remembers the key). Without a key, or with a wrong one, the whole page is replaced by a "Ask Arturo for the link" message, and nothing is read or created. Creating a new calendar is switched off (`ALLOW_NEW_CALENDAR` in `app.js`): there is only one shared calendar.
 
 ## Run locally (demo mode)
 While `config.js` has `firebaseConfig = null`, everything is saved in this browser only, and two tabs stay in sync.
