@@ -1,6 +1,6 @@
 // Data layer. Firestore when config.js has a config, otherwise a demo store in localStorage
 // (synced live between tabs of the same browser, handy for testing both people side by side).
-import { firebaseConfig } from './config.js';
+import { firebaseConfig } from './config.js?v=3';
 
 const FIREBASE_VERSION = '10.12.2';
 const COLLS = ['events', 'activities'];
@@ -30,9 +30,14 @@ export async function openStore(key, onData, onError) {
       start: read,
       put: async (c, o) => write(db => { (db[c] ||= {})[o.id] = clean(o); }),
       del: async (c, id) => write(db => { if (db[c]) delete db[c][id]; }),
-      seed: async list => {
-        if (load().meta?.seeded) return;
-        write(db => { db.activities ||= {}; for (const a of list) db.activities[a.id] ||= clean(a); (db.meta ||= {}).seeded = true; });
+      seed: async (list, version) => {
+        const meta = load().meta, have = meta?.seeded ? (meta.version || 1) : 0;
+        if (have >= version) return;
+        write(db => {
+          db.activities ||= {};
+          for (const a of list) if (a.since > have) db.activities[a.id] ||= clean(a);
+          db.meta = { ...(db.meta || {}), seeded: true, version };
+        });
       },
     };
   }
@@ -54,13 +59,15 @@ export async function openStore(key, onData, onError) {
     },
     put: (c, o) => F.setDoc(ref(c, o.id), clean(o)).catch(onError),
     del: (c, id) => F.deleteDoc(ref(c, id)).catch(onError),
-    seed: async list => {
+    // Writes the starting ideas once, and later-added ideas (a.since > stored version) once per space.
+    seed: async (list, version) => {
       try {
         const m = await F.getDoc(ref('meta', 'seed'));
-        if (m.exists()) return;
+        const have = m.exists() ? (m.data().version || 1) : 0;
+        if (have >= version) return;
         const b = F.writeBatch(db);
-        for (const a of list) b.set(ref('activities', a.id), clean(a));
-        b.set(ref('meta', 'seed'), { at: Date.now() });
+        for (const a of list) if (a.since > have) b.set(ref('activities', a.id), clean(a));
+        b.set(ref('meta', 'seed'), { at: Date.now(), version });
         await b.commit();
       } catch (e) { onError(e); }
     },

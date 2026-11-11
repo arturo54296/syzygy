@@ -39,4 +39,11 @@ const LIST = [
   A('🏺', 'Workshop (pottery…)', 'indoor', 3, 3, false, true),
 ];
 
-export const SEED = LIST.map((a, i) => ({ id: 'seed' + String(i + 1).padStart(2, '0'), archived: false, ...a }));
+// Ideas added after the first version. `since` = SEED_VERSION that introduced them: existing spaces get them once,
+// on their next load (if you delete one afterwards it doesn't come back).
+const LATER = [
+  { since: 2, ...A('🛏️', 'Sleeping together', 'indoor', 0, 12), fixed: { from: '21:00', to: '09:00' } },
+];
+
+export const SEED_VERSION = 2;
+export const SEED = [...LIST, ...LATER].map((a, i) => ({ id: 'seed' + String(i + 1).padStart(2, '0'), archived: false, since: 1, ...a }));

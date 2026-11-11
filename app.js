@@ -1,5 +1,5 @@
-import { openStore, makeKey } from './store.js';
-import { SEED } from './activities.js';
+import { openStore, makeKey } from './store.js?v=3';
+import { SEED, SEED_VERSION } from './activities.js?v=3';
 
 const MIN = 60e3, HOUR = 36e5, DAY = 864e5, SNAP = 15 * MIN;
 const PEOPLE = { arturo: { name: 'Arturo', css: '--arturo' }, zosia: { name: 'Zosia', css: '--zosia' } };
@@ -113,7 +113,17 @@ const actById = id => data.activities.find(a => a.id === id);
 const actsSorted = () => [...data.activities].sort((a, b) => a.name.localeCompare(b.name));
 const actLabel = a => a ? `${a.emoji || '•'} ${a.name}` : '(deleted activity)';
 const placeIcon = a => a.place === 'outdoor' ? '🌳' : a.place === 'indoor' ? '🏠' : '🏠🌳';
+/** Ideas with a fixed time (e.g. sleeping together 21:00–09:00): their range on the day that starts at dayStart. Ends the next day if `to` ≤ `from`. */
+const toMin = hm => { const [h, m] = hm.split(':').map(Number); return h * 60 + m; };
+function fixedRange(a, dayStart) {
+  if (!a?.fixed?.from || !a?.fixed?.to) return null;
+  const f = toMin(a.fixed.from), t = toMin(a.fixed.to);
+  const s = new Date(startOfDay(dayStart)); s.setMinutes(f);
+  const e = new Date(startOfDay(dayStart)); if (t <= f) e.setDate(e.getDate() + 1); e.setMinutes(t);
+  return [+s, +e];
+}
 const tags = (a, long = false) => [
+  a.fixed?.from ? `🕘 ${a.fixed.from}–${a.fixed.to}` : null,
   long ? { indoor: '🏠 indoor', outdoor: '🌳 outdoor', both: '🏠🌳 indoor or outdoor' }[a.place] || '' : placeIcon(a),
   COST[a.cost ?? 0], a.hours ? `~${a.hours} h` : null,
   a.weather ? (long ? '☀️ needs good weather' : '☀️') : null, a.booking ? (long ? '📅 book ahead' : '📅') : null,
@@ -368,6 +378,8 @@ function dropTarget(x, y) {
   const col = n?.closest('.col');
   if (!col) return null;
   const t = col._ds + Math.round(Math.max(0, y - col.getBoundingClientRect().top) / col._ppm / SNAP) * SNAP;
+  const fx = fixedRange(ideaDrag.a, col._ds);
+  if (fx) return { col, s: fx[0], e: fx[1] };
   const dur = Math.max(SNAP, Math.round((ideaDrag.a.hours || 2) * HOUR / SNAP) * SNAP);
   return { col, s: t, e: Math.min(t + dur, col._ds + DAY) };
 }
@@ -484,7 +496,9 @@ function timeInputs(s, e) {
   const slots = el('div', { class: 'row' }, el('label', {}, 'Slot'), SLOTS.map(([name, h0, h1]) => el('button', { type: 'button', onclick: () => {
     ed.value = sd.value; st.value = `${pad(h0)}:00`; et.value = `${pad(h1)}:00`;
   } }, name)));
-  return { nodes: [el('div', { class: 'row' }, el('label', {}, 'From'), sd, st), el('div', { class: 'row' }, el('label', {}, 'To'), ed, et), slots], read };
+  const set = (a, b) => { sd.value = dmy(a); st.value = hhmm(a); ed.value = dmy(b); et.value = hhmm(b); };
+  const day = () => parseDmy(sd.value);
+  return { nodes: [el('div', { class: 'row' }, el('label', {}, 'From'), sd, st), el('div', { class: 'row' }, el('label', {}, 'To'), ed, et), slots], read, set, day };
 }
 
 function repeatInputs(rep) {
@@ -515,7 +529,7 @@ function picker({ mine, other = new Set(), otherWho = null, f, onChange }) {
     box.replaceChildren(el('div', { class: 'picker', style: { '--mecolor': colorOf(me) } }, list.map(a => {
       const both = mine.has(a.id) && other.has(a.id);
       return el('button', { type: 'button', class: 'pk' + (both ? ' both' : mine.has(a.id) ? ' mine' : '') + (a.archived ? ' arch' : ''), title: (a.note ? a.note + '\n' : '') + tags(a, true),
-        onclick: () => { mine.has(a.id) ? mine.delete(a.id) : mine.add(a.id); draw(); onChange?.(); } },
+        onclick: () => { const add = !mine.has(a.id); add ? mine.add(a.id) : mine.delete(a.id); draw(); onChange?.(a, add); } },
         both ? '❤ ' : '', `${a.emoji || '•'} ${a.name}`,
         el('span', { class: 'dots' },
           mine.has(a.id) ? el('i', { style: { background: colorOf(me) }, title: PEOPLE[me].name }) : null,
@@ -533,13 +547,23 @@ function whoDialog(then) {
   ]);
 }
 
+/** Picking an idea with a fixed time moves the plan to that time on the chosen start day. */
+function applyFixed(ti, a, add) {
+  if (!add) return;
+  const day = ti.day();
+  const fx = day && fixedRange(a, day);
+  if (fx) { ti.set(fx[0], fx[1]); toast(`${actLabel(a)}: time set to ${a.fixed.from}–${a.fixed.to}`); }
+}
+
 function newDialog(s, e, opts = {}) {
   if (!me) return whoDialog(() => newDialog(s, e, opts));
   let kind = opts.kind || 'plan', who = me;
+  const fx0 = (opts.acts || []).map(id => fixedRange(actById(id), s)).find(Boolean);
+  if (fx0) [s, e] = fx0;
   const ti = timeInputs(s, e), rp = repeatInputs(null);
   const mine = new Set(opts.acts || []);
   const f = { ...filt, q: '', archived: false };
-  const pk = picker({ mine, f });
+  const pk = picker({ mine, f, onChange: (a, add) => applyFixed(ti, a, add) });
   const fnode = filtersNode(f, () => { pk.redraw(); }, false);
   const title = el('input', { type: 'text', placeholder: 'Title (optional), e.g. “Lazy Sunday”', style: { flex: 1 } });
   const note = el('textarea', { rows: 2, placeholder: 'Note (optional)' });
@@ -618,7 +642,7 @@ function planDialog(o) {
   const note = el('textarea', { rows: 2, placeholder: 'Note (optional)', value: ev.note || '' });
   const f = { ...filt, q: '', archived: false };
   const matchBox = el('div', {}), decide = el('div', {});
-  const pk = picker({ mine, other: otherSet, otherWho: other, f, onChange: () => drawInfo() });
+  const pk = picker({ mine, other: otherSet, otherWho: other, f, onChange: (a, add) => { applyFixed(ti, a, add); drawInfo(); } });
   const fnode = filtersNode(f, () => pk.redraw(), false);
   const drawInfo = () => {
     const m = [...mine].filter(id => otherSet.has(id)), union = [...new Set([...mine, ...otherSet])];
@@ -675,12 +699,24 @@ function activityDialog(a) {
   const cb = (v, t) => { const i = el('input', { type: 'checkbox', checked: v }); return [i, el('label', {}, i, ' ', t)]; };
   const [weather, weatherL] = cb(a.weather, '☀️ Needs good weather'), [booking, bookingL] = cb(a.booking, '📅 Book ahead'), [arch, archL] = cb(a.archived, 'Archived (hidden from lists)');
   const note = el('textarea', { rows: 2, placeholder: 'Note (optional)', value: a.note || '' });
+  const tf = v => el('input', { type: 'text', value: v || '', size: 5, maxlength: 5, inputmode: 'numeric', placeholder: 'HH:MM' });
+  const fxFrom = tf(a.fixed?.from), fxTo = tf(a.fixed?.to);
+  const readFixed = () => {
+    const ok = v => /^([01]?\d|2[0-3]):[0-5]\d$/.test(v.trim());
+    const f = fxFrom.value.trim(), t = fxTo.value.trim();
+    if (!f && !t) return null;
+    if (!ok(f) || !ok(t)) { toast('Fixed time: use HH:MM for both, or leave both empty'); throw new Error('bad'); }
+    const p = v => v.split(':').map(Number), [fh, fm] = p(f), [th, tm] = p(t);
+    return { from: `${pad(fh)}:${pad(fm)}`, to: `${pad(th)}:${pad(tm)}` };
+  };
   const used = data.events.filter(e => e.kind === 'plan' && (votedIds(e).includes(a.id) || e.chosen === a.id)).length;
   dialog(isNew ? 'New idea' : actLabel(a), [
     el('div', { class: 'row' }, emoji, name),
     el('div', { class: 'row' }, el('label', {}, 'Where'), segCtl([['indoor', '🏠 Indoor'], ['outdoor', '🌳 Outdoor'], ['both', 'Either']], place, v => { place = v; })),
     el('div', { class: 'row' }, el('label', {}, 'Cost'), cost, el('label', { style: { minWidth: 0, marginLeft: '12px' } }, 'Length'), hours, el('span', { class: 'hint' }, 'hours')),
     el('div', { class: 'row' }, weatherL, bookingL),
+    el('div', { class: 'row' }, el('label', {}, 'Fixed time'), fxFrom, '–', fxTo,
+      el('span', { class: 'hint' }, 'optional; picking this idea sets the plan to this time (ends next day if earlier)')),
     el('div', { class: 'row' }, note),
     isNew ? null : el('div', { class: 'row' }, archL),
     el('div', { class: 'actions' },
@@ -691,7 +727,9 @@ function activityDialog(a) {
       el('span', { class: 'spacer' }), el('button', { onclick: close }, 'Cancel'),
       el('button', { class: 'primary', onclick: () => {
         if (!name.value.trim()) { name.focus(); return toast('Give it a name'); }
-        store.put('activities', { ...a, emoji: emoji.value.trim(), name: name.value.trim(), place, cost: +cost.value, hours: Math.max(0, +hours.value || 0),
+        let fixed;
+        try { fixed = readFixed(); } catch { return; }
+        store.put('activities', { ...a, fixed, emoji: emoji.value.trim(), name: name.value.trim(), place, cost: +cost.value, hours: Math.max(0, +hours.value || 0),
           weather: weather.checked, booking: booking.checked, note: note.value.trim(), archived: arch.checked });
         close();
       } }, 'Save')),
@@ -814,7 +852,7 @@ async function boot(fresh = false) {
   } catch (err) { console.error(err); setStatus('down', 'Offline'); toast('Could not load Firebase'); return; }
   setStatus(store.mode === 'demo' ? 'demo' : '', store.mode === 'demo' ? 'Demo (this browser only)' : 'Live');
   store.start();
-  await store.seed(SEED);
+  await store.seed(SEED, SEED_VERSION);
   render();
   scrollTo8();
   if (fresh) shareDialog(true);
