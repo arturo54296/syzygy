@@ -1,6 +1,6 @@
-import { openStore, makeKey } from './store.js?v=16';
-import { SEED, SEED_VERSION } from './activities.js?v=16';
-import * as G from './gcal.js?v=16';
+import { openStore, makeKey } from './store.js?v=18';
+import { SEED, SEED_VERSION } from './activities.js?v=18';
+import * as G from './gcal.js?v=18';
 
 const MIN = 60e3, HOUR = 36e5, DAY = 864e5, SNAP = 15 * MIN;
 const PEOPLE = { arturo: { name: 'Arturo', css: '--arturo' }, zosia: { name: 'Zosia', css: '--zosia' } };
@@ -1123,38 +1123,52 @@ $('#meBtn').onclick = () => whoDialog();
 $('#shareBtn').onclick = () => shareDialog();
 $('#gcalBtn').onclick = () => (G.hasClient && G.wanted() && !G.isValid() && G.ready()) ? G.requestToken('') : gcalDialog();
 $('#asideBtn').onclick = e => { e.stopPropagation(); $('#aside').classList.toggle('open'); };
-document.addEventListener('click', e => { const a = $('#aside'); if (a.classList.contains('open') && !a.contains(e.target) && !$('#dlg').contains(e.target)) a.classList.remove('open'); });
+document.addEventListener('click', e => { if (!store) return; const a = $('#aside'); if (a.classList.contains('open') && !a.contains(e.target) && !$('#dlg').contains(e.target)) a.classList.remove('open'); });
 document.addEventListener('keydown', e => {
-  if ($('#dlg').open || e.target.matches('input, textarea, select')) return;
+  if (!store || $('#dlg').open || e.target.matches('input, textarea, select')) return;
   if (e.key === 'ArrowLeft') shift(-1); else if (e.key === 'ArrowRight') shift(1);
   else if (e.key === 't') $('#today').click();
   else if (e.key === '+' || e.key === '=') zoom(1); else if (e.key === '-') zoom(-1);
   else if (e.key === 'w') setMode('week'); else if (e.key === '3') setMode('3day'); else if (e.key === 'd') setMode('day');
 });
-setInterval(() => { if (!document.hidden && !$('#dlg').open) render(); }, 60e3);
+setInterval(() => { if (store && !document.hidden && !$('#dlg').open) render(); }, 60e3);
 let resizeT; addEventListener('resize', () => { clearTimeout(resizeT); resizeT = setTimeout(render, 150); });   // re-fit block texts  // keeps the "now" line moving
 
 // ---------- boot ----------
 function setStatus(cls, text) { const s = $('#status'); s.className = cls; s.lastElementChild.textContent = text; }
+/** Without a valid key the whole page is replaced by this message: nothing of the app is left to use. */
+function lockScreen(reason) {
+  document.title = 'Together · locked';
+  document.body.replaceChildren(el('div', { class: 'lock' }, el('div', { class: 'lockbox' },
+    el('div', { class: 'big' }, '🔒'),
+    el('h2', {}, reason),
+    el('p', {}, 'This calendar only opens with its full link, which includes a secret key (the part after “#k=”).'),
+    el('p', {}, el('b', {}, 'Ask Arturo for the link.')))));
+}
 async function boot(fresh = false) {
   const fromHash = (location.hash.match(/k=([a-z0-9]+)/i) || [])[1];
-  const key = fromHash || LS.get('key', null);
-  if (!key) {
-    setStatus('down', 'Not set up');
-    dialog('💞 Together', [
-      el('p', {}, 'A shared calendar to find time together and decide what to do.'),
-      el('p', {}, 'Create your shared space once, then send the link to the other person.'),
+  const key = fromHash || LS.get('key', null);   // a device that opened the full link once remembers its key
+  if (location.hash === '#new') {   // hidden: make a brand-new calendar (only via ".../#new")
+    dialog('💞 New shared calendar', [
+      el('p', {}, 'This creates a new, empty shared calendar with its own secret link.'),
       el('div', { class: 'actions' }, el('span', { class: 'spacer' }), el('button', { class: 'primary', onclick: () => {
         location.hash = 'k=' + makeKey(); close(); boot(true);
-      } }, 'Create our shared calendar')),
+      } }, 'Create a new calendar')),
     ]);
     return;
   }
-  if (!fromHash) history.replaceState(null, '', '#k=' + key);
-  LS.set('key', key);
+  if (!key) return lockScreen('This link has no key.');
   try {
     store = await openStore(key, d => { data = d; render(); gSchedule(); }, err => { console.error(err); setStatus('down', 'Connection problem'); toast('Could not reach the database: ' + (err.code || err.message)); });
   } catch (err) { console.error(err); setStatus('down', 'Offline'); toast('Could not load Firebase'); return; }
+  // a wrong key must not open (or create) anything; null = couldn't check (offline), then trust it
+  if (!fresh && (await store.exists()) === false) {
+    if (!fromHash) LS.set('key', null);
+    store = null;
+    return lockScreen(fromHash ? 'The key in this link isn’t correct.' : 'The saved key on this device isn’t correct any more.');
+  }
+  if (!fromHash) history.replaceState(null, '', '#k=' + key);
+  LS.set('key', key);
   setStatus(store.mode === 'demo' ? 'demo' : '', store.mode === 'demo' ? 'Demo (this browser only)' : 'Live');
   // any change to a plan from a click: if Google sign-in expired, renew it now (a popup needs a click)
   const rawPut = store.put, rawDel = store.del;

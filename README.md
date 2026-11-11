@@ -15,6 +15,9 @@ It's a static site with no backend: the data lives in Firebase Firestore, and th
 - 🎲 **Surprise us**: a random idea from the filtered list, with a button to plan it at your next shared free time.
 - 📊 **Stats**: how many times you've done each activity and when you last did it, plus the ideas you haven't tried yet.
 
+## The secret link
+The app only opens with the full link, which ends in `#k=<key>`, or on a device that has opened that link before (each device remembers the key). Without a key, or with a wrong one, the whole page is replaced by a "Ask Arturo for the link" message, and nothing is read or created. To make a brand-new calendar, open the site with `#new` at the end.
+
 ## Run locally (demo mode)
 While `config.js` has `firebaseConfig = null`, everything is saved in this browser only, and two tabs stay in sync.
 ```bash
@@ -33,7 +36,7 @@ The config values are public by design. What protects the data is the long rando
 ## Deploy on Render (free static site)
 1. Push this folder to a **private** GitHub repo.
 2. On https://render.com, choose **New → Static Site**, connect the repo, leave the **Build command** empty and set the **Publish directory** to `.`. Alternatively, use **New → Blueprint**, which reads `render.yaml`.
-3. Open the `….onrender.com` URL and click **Create our shared calendar**. Copy the link it shows (it ends in `#k=…`) and send it to the other person. Both of you bookmark it.
+3. Open `https://….onrender.com/#new` and click **Create a new calendar**. Copy the link it shows (it ends in `#k=…`) and send it to the other person. Both of you bookmark it.
 
 Every push to the repo redeploys the site. Your data is unaffected, because it lives in Firebase.
 

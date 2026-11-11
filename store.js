@@ -1,6 +1,6 @@
 // Data layer. Firestore when config.js has a config, otherwise a demo store in localStorage
 // (synced live between tabs of the same browser, handy for testing both people side by side).
-import { firebaseConfig } from './config.js?v=16';
+import { firebaseConfig } from './config.js?v=18';
 
 const FIREBASE_VERSION = '10.12.2';
 const COLLS = ['events', 'activities', 'meta'];   // meta: shared settings (e.g. the Google calendar) and sync state
@@ -28,6 +28,7 @@ export async function openStore(key, onData, onError) {
     const write = fn => { const db = load(); fn(db); localStorage.setItem(LK, JSON.stringify(db)); bc?.postMessage(1); read(); };
     return {
       mode: 'demo',
+      exists: async () => { const d = load(); return !!(d._seed || d.meta?.seeded); },
       start: read,
       put: async (c, o) => write(db => { (db[c] ||= {})[o.id] = clean(o); }),
       del: async (c, id) => write(db => { if (db[c]) delete db[c][id]; }),
@@ -53,6 +54,8 @@ export async function openStore(key, onData, onError) {
   const ref = (c, id) => F.doc(db, 'spaces', key, c, id);
   return {
     mode: 'live',
+    /** Is there a calendar under this key? (every real one has meta/seed, written when it was created) */
+    exists: async () => { try { return (await F.getDoc(ref('meta', 'seed'))).exists(); } catch { return null; } },   // null = couldn't check (offline)
     start: () => {
       for (const c of COLLS) F.onSnapshot(F.collection(db, 'spaces', key, c), snap => {
         data[c] = snap.docs.map(d => ({ ...d.data(), id: d.id })); ready[c] = true; emit();

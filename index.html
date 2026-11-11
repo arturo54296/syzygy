@@ -158,6 +158,9 @@ table.st td { padding: 4px 4px; border-bottom: 1px solid var(--line); }
 table.st td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--muted); }
 .copybox { display: flex; gap: 6px; }
 .copybox input { flex: 1; min-width: 0; font-size: 12px; }
+.lock { flex: 1; display: flex; align-items: center; justify-content: center; padding: 24px; }
+.lockbox { max-width: 420px; text-align: center; background: var(--panel); border: 1px solid var(--line-strong); border-radius: 12px; padding: 24px; box-shadow: var(--shadow); }
+.lockbox h2 { font-size: 18px; margin: 4px 0 12px; }
 #toast { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 8px 14px; border-radius: 8px; opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 50; max-width: 90vw; }
 #toast.on { opacity: 1; }
 #asideBtn { display: none; }
@@ -205,6 +208,6 @@ table.st td.num { text-align: right; font-variant-numeric: tabular-nums; white-s
 </main>
 <dialog id="dlg"></dialog>
 <div id="toast"></div>
-<script type="module" src="app.js?v=16"></script>
+<script type="module" src="app.js?v=18"></script>
 </body>
 </html>
