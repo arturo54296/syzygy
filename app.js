@@ -218,6 +218,7 @@ function renderCalendar(days) {
         plans.length ? el('span', { class: 'pchip' }, `${plans.length} plan${plans.length > 1 ? 's' : ''}`) : null)));
 
     const col = el('div', { class: 'col' + (today ? ' today' : '') });
+    col._ds = ds; col._ppm = pxPerMs;
     const top = t => `${(Math.max(t, ds) - ds) * pxPerMs}px`;
     const ht = (s, e) => `${Math.max((Math.min(e, de) - Math.max(s, ds)) * pxPerMs, 3)}px`;
     // availability: left half Arturo, right half Zosia
@@ -242,6 +243,7 @@ function renderCalendar(days) {
       const node = el('div', { class: 'plan ' + (x.o.ev.status === 'confirmed' ? 'conf' : 'prop'), style: { top: top(x.s), height: ht(x.s, x.e), left: `${8 + x.lane * w}%`, width: `calc(${w}% - 2px)` }, title: planTip(x.o) },
         planCard(x.o, h));
       node._click = () => planDialog(x.o);
+      node._occ = x.o;
       col.append(node);
     }
     if (today) col.append(el('div', { class: 'now', style: { top: `${(Date.now() - ds) * pxPerMs}px` } }));
@@ -322,7 +324,8 @@ function renderAside() {
       el('button', { onclick: statsDialog }, '📊 Stats')),
     filtersNode(filt, () => { LS.set('filt', { ...filt, q: '' }); renderAside(); }, true),
     el('div', { class: 'hint' }, `${acts.length} of ${data.activities.filter(x => !x.archived).length} ideas`),
-    el('ul', { class: 'list' }, acts.map(x => el('li', { class: x.archived ? 'arch' : '', onclick: () => activityDialog(x), title: (x.note ? x.note + '\n' : '') + tags(x, true) },
+    el('ul', { class: 'list' }, acts.map(x => el('li', { class: x.archived ? 'arch' : '', onclick: () => { if (!dragJustEnded) activityDialog(x); }, onpointerdown: e => ideaPointerDown(x, e),
+      title: (x.note ? x.note + '\n' : '') + tags(x, true) + '\nDrag onto the calendar to plan it (on a phone: hold, then drag)' },
       el('span', { class: 'emo' }, x.emoji || '•'),
       el('div', { class: 'n' }, el('div', {}, x.name), el('div', { class: 'tags' }, tags(x))),
       el('span', { class: 'cnt', title: 'Times done' }, done[x.id] ? `×${done[x.id].n}` : '')))),
@@ -334,11 +337,95 @@ function renderAside() {
       el('div', {}, el('span', { class: 'sw', style: { border: '2px dashed var(--love)', background: 'var(--love-soft)' } }), 'both available'),
       el('div', {}, el('span', { class: 'sw', style: { border: '2px dashed var(--love)', background: 'var(--panel)' } }), 'plan (proposed)'),
       el('div', {}, el('span', { class: 'sw', style: { background: 'var(--love)' } }), 'plan (confirmed)')),
-    el('p', { class: 'hint' }, 'Drag on the calendar (or tap an empty spot) to add a plan or free/flexible time. Click anything to edit it. Keys: ← → t w 3 d + −.'),
+    el('p', { class: 'hint' }, 'Drag on the calendar (or tap an empty spot) to add a plan or free/flexible time. Drag an idea onto the calendar to plan it, or onto a plan to vote for it (phone: hold the idea, then drag). Click anything to edit it. Keys: ← → t w 3 d + −.'),
   );
   a.scrollTop = keepScroll;
   if (focused) document.getElementById(focused)?.focus();
 }
+
+// ---------- drag an idea onto the calendar ----------
+// Mouse: press and drag. Touch: hold ~0.35 s, then drag (a quick swipe still scrolls the list).
+// Drop on an empty spot = new plan with that idea at that time; drop on a plan = add it to your votes there.
+let ideaDrag = null, dragJustEnded = false;
+function ideaPointerDown(a, e) {
+  if (e.button !== 0) return;
+  const st = { a, x: e.clientX, y: e.clientY, id: e.pointerId, touch: e.pointerType !== 'mouse', active: false, timer: null, ghost: null, prev: null, drop: null };
+  ideaDrag = st;
+  if (st.touch) st.timer = setTimeout(() => { if (ideaDrag === st) { beginIdeaDrag(st); navigator.vibrate?.(20); } }, 350);
+}
+function beginIdeaDrag(st) {
+  st.active = true;
+  document.body.classList.add('dragging');
+  st.ghost = el('div', { class: 'ghost' }, `${st.a.emoji || '•'} ${st.a.name}`);
+  document.body.append(st.ghost);
+  moveGhost(st, st.x, st.y);
+  setTimeout(() => $('#aside').classList.remove('open'), 150);   // phone: get the drawer out of the way
+}
+function dropTarget(x, y) {
+  const n = document.elementFromPoint(x, y);
+  const plan = n?.closest('.plan');
+  if (plan?._occ) return { plan };
+  const col = n?.closest('.col');
+  if (!col) return null;
+  const t = col._ds + Math.round(Math.max(0, y - col.getBoundingClientRect().top) / col._ppm / SNAP) * SNAP;
+  const dur = Math.max(SNAP, Math.round((ideaDrag.a.hours || 2) * HOUR / SNAP) * SNAP);
+  return { col, s: t, e: Math.min(t + dur, col._ds + DAY) };
+}
+function moveGhost(st, x, y) {
+  Object.assign(st.ghost.style, { left: `${x + 12}px`, top: `${y + 12}px` });
+  const sc = $('#calScroll').getBoundingClientRect();
+  if (x > sc.left && x < sc.right) { if (y < sc.top + 40) $('#calScroll').scrollTop -= 12; else if (y > sc.bottom - 40) $('#calScroll').scrollTop += 12; }
+  const d = dropTarget(x, y);
+  st.drop = d;
+  st.prev?.remove(); st.prev = null;
+  document.querySelectorAll('.plan.droptarget').forEach(n => n.classList.remove('droptarget'));
+  if (d?.plan) d.plan.classList.add('droptarget');
+  else if (d?.col) {
+    st.prev = el('div', { class: 'sel', style: { top: `${(d.s - d.col._ds) * d.col._ppm}px`, height: `${(d.e - d.s) * d.col._ppm}px` } }, `${st.a.emoji || ''} ${hhmm(d.s)}–${hhmmEnd(d.e)}`);
+    d.col.append(st.prev);
+  }
+}
+function endIdeaDrag(drop) {
+  const st = ideaDrag;
+  ideaDrag = null;
+  if (!st) return;
+  clearTimeout(st.timer);
+  if (!st.active) return;
+  st.ghost.remove(); st.prev?.remove();
+  document.querySelectorAll('.plan.droptarget').forEach(n => n.classList.remove('droptarget'));
+  document.body.classList.remove('dragging');
+  dragJustEnded = true; setTimeout(() => { dragJustEnded = false; }, 50);
+  const d = drop ? st.drop : null;
+  if (!d) return;
+  if (d.plan) addVote(d.plan._occ, st.a);
+  else newDialog(d.s, d.e, { kind: 'plan', acts: [st.a.id] });
+}
+function addVote(o, a) {
+  if (!me) return whoDialog(() => addVote(o, a));
+  const cur = data.events.find(x => x.id === o.ev.id);
+  if (!cur) return;
+  const v = votesOf(cur);
+  if (v[me].includes(a.id)) return toast(`${actLabel(a)} is already in your votes for this plan`);
+  store.put('events', { ...cur, votes: { ...v, [me]: [...v[me], a.id] } });
+  toast(v[OTHER[me]].includes(a.id) ? `❤ It’s a match: ${actLabel(a)}` : `Added ${actLabel(a)} to your votes`);
+}
+document.addEventListener('pointermove', e => {
+  const st = ideaDrag;
+  if (!st || e.pointerId !== st.id) return;
+  if (!st.active) {
+    const dist = Math.hypot(e.clientX - st.x, e.clientY - st.y);
+    if (st.touch) { if (dist > 10) { clearTimeout(st.timer); ideaDrag = null; } return; }   // a swipe = scrolling
+    if (dist < 6) return;
+    beginIdeaDrag(st);
+  }
+  e.preventDefault();
+  moveGhost(st, e.clientX, e.clientY);
+}, { passive: false });
+document.addEventListener('touchmove', e => { if (ideaDrag?.active) e.preventDefault(); }, { passive: false });  // no scrolling while dragging
+document.addEventListener('pointerup', e => { if (ideaDrag && e.pointerId === ideaDrag.id) endIdeaDrag(true); });
+document.addEventListener('pointercancel', e => { if (ideaDrag && e.pointerId === ideaDrag.id) endIdeaDrag(false); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && ideaDrag) endIdeaDrag(false); });
+document.addEventListener('contextmenu', e => { if (ideaDrag) e.preventDefault(); });
 
 /** Filter controls; f is changed in place, then onChange() runs. */
 function filtersNode(f, onChange, withArchived = false) {

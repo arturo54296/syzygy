@@ -9,6 +9,7 @@ It's a static site with no backend: the data lives in Firebase Firestore, and th
 - **Matches**: the times when you're both free (solid pink) or both available with at least one of you only flexible (dashed pink). They're listed in the sidebar as "Next times you're both free".
 - **Plans**: an empty event where you pick the activities you'd like to do (at least one, up to all of them). Each person votes separately, and the activities you both picked are marked ❤. You set a final choice (or press 🎲 Pick for us) and mark the plan Proposed or Confirmed.
 - **Ideas list**: editable (add, edit, archive, delete, emoji), with tags for indoor/outdoor, cost, length, needs good weather and book ahead. Filters include ☔ "It's raining", "No booking", cost, length and search.
+- **Drag an idea** from the list onto the calendar to plan it there, or onto a plan to add it to your votes. On a phone: hold the idea, then drag.
 - 🎲 **Surprise us**: a random idea from the filtered list, with a button to plan it at your next shared free time.
 - 📊 **Stats**: how many times you've done each activity and when you last did it, plus the ideas you haven't tried yet.
 
