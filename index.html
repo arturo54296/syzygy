@@ -94,6 +94,7 @@ body.dragging, body.dragging * { cursor: grabbing !important; user-select: none 
 .col.today { background-color: rgba(224,69,123,.03); }
 .av { position: absolute; border-radius: 3px; overflow: hidden; cursor: pointer; font-size: 10px; line-height: 1.2; padding: 2px 3px; }
 .av span { font-weight: 600; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nt { font-size: 10px; font-style: italic; font-weight: 400; opacity: .9; white-space: pre-wrap; overflow-wrap: anywhere; margin-top: 1px; }
 .av:hover { filter: brightness(1.1); outline: 1px solid var(--ink); z-index: 3; }
 .match { position: absolute; left: 1px; right: 1px; border: 2px dashed var(--love); border-radius: 6px; background: var(--love-soft); pointer-events: none; z-index: 2; }
 .match.strong { border-style: solid; }
@@ -200,6 +201,6 @@ table.st td.num { text-align: right; font-variant-numeric: tabular-nums; white-s
 </main>
 <dialog id="dlg"></dialog>
 <div id="toast"></div>
-<script type="module" src="app.js?v=9"></script>
+<script type="module" src="app.js?v=10"></script>
 </body>
 </html>

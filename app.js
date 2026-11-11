@@ -1,6 +1,6 @@
-import { openStore, makeKey } from './store.js?v=9';
-import { SEED, SEED_VERSION } from './activities.js?v=9';
-import * as G from './gcal.js?v=9';
+import { openStore, makeKey } from './store.js?v=10';
+import { SEED, SEED_VERSION } from './activities.js?v=10';
+import * as G from './gcal.js?v=10';
 
 const MIN = 60e3, HOUR = 36e5, DAY = 864e5, SNAP = 15 * MIN;
 const PEOPLE = { arturo: { name: 'Arturo', css: '--arturo' }, zosia: { name: 'Zosia', css: '--zosia' } };
@@ -205,6 +205,7 @@ function planCard(o, h) {
   if (h >= 42 && ev.status !== 'confirmed') kids.push(el('div', { class: 'em' }, m.length ? '❤ ' + m.map(em).join('') + (rest.length ? ' · ' : '') : '', rest.map(em).join('')));
   const waiting = WHO.filter(p => !v[p].length);
   if (h >= 56 && waiting.length && ev.status !== 'confirmed') kids.push(el('div', { class: 'wait' }, `⏳ waiting for ${waiting.map(p => PEOPLE[p].name).join(', ')}`));
+  if (ev.note) kids.push(el('div', { class: 'nt' }, ev.note));   // the note goes last
   return kids;
 }
 function planTip(o) {
@@ -252,6 +253,7 @@ function renderCalendar(days) {
           title: `${PEOPLE[who].name} is ${LEVEL[o.ev.level]}${o.rep ? ' (repeats)' : ''}\n${hhmm(o.s)}–${hhmmEnd(o.e)}${o.ev.note ? '\n' + o.ev.note : ''}` });
         if ((x.e - x.s) * pxPerMs >= 26) node.append(el('span', {}, PEOPLE[who].name), el('span', {}, LEVEL[o.ev.level] + (o.rep ? ' ↻' : '')));
         else if ((x.e - x.s) * pxPerMs >= 13) node.append(el('span', {}, `${PEOPLE[who].name[0]} · ${LEVEL[o.ev.level]}`));
+        if (o.ev.note) node.append(el('div', { class: 'nt' }, o.ev.note));   // the note goes last; cut off if the block is short
         node._click = () => availDialog(o);
         node._occ = o;
         col.append(node);
@@ -425,7 +427,7 @@ function renderAside() {
     el('ul', { class: 'list' }, acts.map(x => el('li', { class: x.archived ? 'arch' : '', onclick: () => { if (!dragJustEnded) activityDialog(x); }, onpointerdown: e => ideaPointerDown(x, e),
       title: (x.note ? x.note + '\n' : '') + tags(x, true) + '\nDrag onto the calendar to plan it (on a phone: hold, then drag)' },
       el('span', { class: 'emo' }, x.emoji || '•'),
-      el('div', { class: 'n' }, el('div', {}, x.name), el('div', { class: 'tags' }, tags(x))),
+      el('div', { class: 'n' }, el('div', {}, x.name), el('div', { class: 'tags' }, tags(x)), x.note ? el('div', { class: 'tags nt' }, x.note) : null),
       el('span', { class: 'cnt', title: 'Times done' }, done[x.id] ? `×${done[x.id].n}` : '')))),
 
     el('h2', {}, el('span', {}, 'Legend')),
