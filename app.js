@@ -1,6 +1,6 @@
-import { openStore, makeKey } from './store.js?v=11';
-import { SEED, SEED_VERSION } from './activities.js?v=11';
-import * as G from './gcal.js?v=11';
+import { openStore, makeKey } from './store.js?v=12';
+import { SEED, SEED_VERSION } from './activities.js?v=12';
+import * as G from './gcal.js?v=12';
 
 const MIN = 60e3, HOUR = 36e5, DAY = 864e5, SNAP = 15 * MIN;
 const PEOPLE = { arturo: { name: 'Arturo', css: '--arturo' }, zosia: { name: 'Zosia', css: '--zosia' } };
@@ -202,6 +202,23 @@ function exactInput(ev) {
     el('span', { class: 'hint' }, 'unticked = approximate (soft edges, “~”)')), read: () => cb.checked };
 }
 
+/** Everything in a block wraps onto as many lines as needed; only if it doesn't fit is the text cut, with one "…" at the very end. */
+function fitText(n) {
+  const over = () => n.scrollHeight > n.clientHeight + 1;
+  if (!over()) return;
+  const texts = [], w = document.createTreeWalker(n, NodeFilter.SHOW_TEXT);
+  while (w.nextNode()) texts.push(w.currentNode);
+  for (let i = texts.length - 1; i >= 0; i--) {
+    const t = texts[i], full = t.data;
+    t.data = '…';
+    if (over()) { const p = t.parentNode; t.remove(); if (p !== n && !p.textContent.trim()) p.remove(); continue; }
+    let lo = 0, hi = full.length;   // longest start of this text that still fits with "…"
+    while (lo < hi) { const mid = (lo + hi + 1) >> 1; t.data = full.slice(0, mid).trimEnd() + '…'; if (over()) hi = mid - 1; else lo = mid; }
+    t.data = full.slice(0, lo).trimEnd() + '…';
+    return;
+  }
+}
+
 function planHeadline(ev) {
   // own title if given; otherwise the final choice, or the only idea; several ideas and no decision = "Undecided plan"
   if (ev.title) return ev.title;
@@ -212,10 +229,10 @@ function planCard(o, h) {
   const ev = o.ev, v = votesOf(ev), m = matchedIds(ev), rest = votedIds(ev).filter(id => !m.includes(id));
   const em = id => actById(id)?.emoji || '•';
   const kids = [el('b', {}, (ev.status === 'confirmed' ? '✓ ' : '') + planHeadline(ev) + (o.rep ? ' ↻' : ''))];
-  if (h >= 28) kids.push(el('div', {}, span(ev, o.s, o.e)));
-  if (h >= 42 && ev.status !== 'confirmed') kids.push(el('div', { class: 'em' }, m.length ? '❤ ' + m.map(em).join('') + (rest.length ? ' · ' : '') : '', rest.map(em).join('')));
+  kids.push(el('div', {}, span(ev, o.s, o.e)));
+  if (ev.status !== 'confirmed') kids.push(el('div', { class: 'em' }, m.length ? '❤ ' + m.map(em).join('') + (rest.length ? ' · ' : '') : '', rest.map(em).join('')));
   const waiting = WHO.filter(p => !v[p].length);
-  if (h >= 56 && waiting.length && ev.status !== 'confirmed') kids.push(el('div', { class: 'wait' }, `⏳ waiting for ${waiting.map(p => PEOPLE[p].name).join(', ')}`));
+  if (waiting.length && ev.status !== 'confirmed') kids.push(el('div', { class: 'wait' }, `⏳ waiting for ${waiting.map(p => PEOPLE[p].name).join(', ')}`));
   if (ev.note) kids.push(el('div', { class: 'nt' }, ev.note));   // the note goes last
   return kids;
 }
@@ -263,8 +280,7 @@ function renderCalendar(days) {
         const o = x.o, w = 50 / x.lanes;
         const node = el('div', { class: 'av' + (approx(o.ev) ? ' fuzzy' : ''), style: { ...place(o.ev, topN(x.s), htN(x.s, x.e)), left: `${i * 50 + x.lane * w}%`, width: `calc(${w}% - 1px)`, ...availStyle(who, o.ev.level) },
           title: `${PEOPLE[who].name} is ${LEVEL[o.ev.level]}${o.rep ? ' (repeats)' : ''}\n${span(o.ev, o.s, o.e)}${o.ev.note ? '\n' + o.ev.note : ''}` });
-        if ((x.e - x.s) * pxPerMs >= 26) node.append(el('span', {}, PEOPLE[who].name), el('span', {}, LEVEL[o.ev.level] + (o.rep ? ' ↻' : '')));
-        else if ((x.e - x.s) * pxPerMs >= 13) node.append(el('span', {}, `${PEOPLE[who].name[0]} · ${LEVEL[o.ev.level]}`));
+        node.append(el('span', {}, PEOPLE[who].name), el('span', {}, LEVEL[o.ev.level] + (o.rep ? ' ↻' : '')));
         if (o.ev.note) node.append(el('div', { class: 'nt' }, o.ev.note));   // the note goes last; cut off if the block is short
         node._click = () => availDialog(o);
         node._occ = o;
@@ -287,6 +303,7 @@ function renderCalendar(days) {
     attachDrag(col, ds, pxPerMs);
     body.append(col);
   }
+  body.querySelectorAll('.av, .plan').forEach(fitText);
 }
 
 function attachDrag(col, ds, pxPerMs) {
@@ -1085,7 +1102,8 @@ document.addEventListener('keydown', e => {
   else if (e.key === '+' || e.key === '=') zoom(1); else if (e.key === '-') zoom(-1);
   else if (e.key === 'w') setMode('week'); else if (e.key === '3') setMode('3day'); else if (e.key === 'd') setMode('day');
 });
-setInterval(() => { if (!document.hidden && !$('#dlg').open) render(); }, 60e3);  // keeps the "now" line moving
+setInterval(() => { if (!document.hidden && !$('#dlg').open) render(); }, 60e3);
+let resizeT; addEventListener('resize', () => { clearTimeout(resizeT); resizeT = setTimeout(render, 150); });   // re-fit block texts  // keeps the "now" line moving
 
 // ---------- boot ----------
 function setStatus(cls, text) { const s = $('#status'); s.className = cls; s.lastElementChild.textContent = text; }
