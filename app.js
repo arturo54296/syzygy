@@ -1,5 +1,5 @@
-import { openStore, makeKey } from './store.js?v=5';
-import { SEED, SEED_VERSION } from './activities.js?v=5';
+import { openStore, makeKey } from './store.js?v=6';
+import { SEED, SEED_VERSION } from './activities.js?v=6';
 
 const MIN = 60e3, HOUR = 36e5, DAY = 864e5, SNAP = 15 * MIN;
 const PEOPLE = { arturo: { name: 'Arturo', css: '--arturo' }, zosia: { name: 'Zosia', css: '--zosia' } };
@@ -363,10 +363,12 @@ function ideaPointerDown(a, e) {
   if (e.button !== 0) return;
   const st = { a, x: e.clientX, y: e.clientY, id: e.pointerId, touch: e.pointerType !== 'mouse', active: false, timer: null, ghost: null, prev: null, drop: null };
   ideaDrag = st;
+  if (!st.touch) e.preventDefault();   // mouse: don't start a text selection (the click still fires)
   if (st.touch) st.timer = setTimeout(() => { if (ideaDrag === st) { beginIdeaDrag(st); navigator.vibrate?.(20); } }, 350);
 }
 function beginIdeaDrag(st) {
   st.active = true;
+  window.getSelection()?.removeAllRanges();
   document.body.classList.add('dragging');
   st.ghost = el('div', { class: 'ghost' }, `${st.a.emoji || '•'} ${st.a.name}`);
   document.body.append(st.ghost);
