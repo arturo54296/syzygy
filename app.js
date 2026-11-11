@@ -1,6 +1,6 @@
-import { openStore, makeKey } from './store.js?v=13';
-import { SEED, SEED_VERSION } from './activities.js?v=13';
-import * as G from './gcal.js?v=13';
+import { openStore, makeKey } from './store.js?v=14';
+import { SEED, SEED_VERSION } from './activities.js?v=14';
+import * as G from './gcal.js?v=14';
 
 const MIN = 60e3, HOUR = 36e5, DAY = 864e5, SNAP = 15 * MIN;
 const PEOPLE = { arturo: { name: 'Arturo', css: '--arturo' }, zosia: { name: 'Zosia', css: '--zosia' } };
@@ -192,13 +192,13 @@ function layoutLanes(items) {
 }
 
 // Times are approximate unless the event is marked exact: shown as "~" and with a colour gradient (halo) that
-// spreads outwards from the block: FUZZ before the start and after the end, and FUZZ_X px to each side.
+// spreads outwards from the block: FUZZ_PLAN (plans) or FUZZ_AVAIL (free/flexible) before the start and after the end, FUZZ_X px to each side.
 const approx = ev => !ev.exact;
 const span = (ev, s, e) => `${approx(ev) ? '~' : ''}${hhmm(s)}–${hhmmEnd(e)}`;
-const FUZZ = 1.5 * HOUR, FUZZ_X = 10;
+const FUZZ_PLAN = 1.5 * HOUR, FUZZ_AVAIL = 0.5 * HOUR, FUZZ_X = 10;
 const cssVar = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
 /** Halo behind a block: [s, e] = the occurrence's real times (not cut at midnight), left/width = the block's CSS. */
-function halo(s, e, ds, ppm, color, left, width, z) {
+function halo(s, e, ds, ppm, color, left, width, z, FUZZ) {
   const f = FUZZ * ppm;
   return el('div', { class: 'halo', style: {
     top: `${(s - FUZZ - ds) * ppm}px`, height: `${(e - s + 2 * FUZZ) * ppm}px`, zIndex: z,
@@ -289,7 +289,7 @@ function renderCalendar(days) {
       const items = layoutLanes(occ.filter(o => o.ev.kind === 'avail' && o.ev.who === who).map(o => ({ o, s: Math.max(o.s, ds), e: Math.min(o.e, de) })));
       for (const x of items) {
         const o = x.o, w = 50 / x.lanes;
-        if (approx(o.ev)) col.append(halo(o.s, o.e, ds, pxPerMs, colorOf(who) + '66', `${i * 50 + x.lane * w}%`, `calc(${w}% - 1px)`, 0));
+        if (approx(o.ev)) col.append(halo(o.s, o.e, ds, pxPerMs, colorOf(who) + '66', `${i * 50 + x.lane * w}%`, `calc(${w}% - 1px)`, 0, FUZZ_AVAIL));
         const node = el('div', { class: 'av', style: { ...place(o.ev, topN(x.s), htN(x.s, x.e)), left: `${i * 50 + x.lane * w}%`, width: `calc(${w}% - 1px)`, ...availStyle(who, o.ev.level) },
           title: `${PEOPLE[who].name} is ${LEVEL[o.ev.level]}${o.rep ? ' (repeats)' : ''}\n${span(o.ev, o.s, o.e)}${o.ev.note ? '\n' + o.ev.note : ''}` });
         node.append(el('span', {}, PEOPLE[who].name), el('span', {}, LEVEL[o.ev.level] + (o.rep ? ' ↻' : '')));
@@ -305,7 +305,7 @@ function renderCalendar(days) {
         m.level === 2 ? '❤ plan' : '❤ maybe') : null));
     for (const x of layoutLanes(plans.map(o => ({ o, s: Math.max(o.s, ds), e: Math.min(o.e, de) })))) {
       const h = (x.e - x.s) * pxPerMs, w = 84 / x.lanes;
-      if (approx(x.o.ev)) col.append(halo(x.o.s, x.o.e, ds, pxPerMs, cssVar('--love') + (x.o.ev.status === 'confirmed' ? '66' : '38'), `${8 + x.lane * w}%`, `calc(${w}% - 2px)`, 3));
+      if (approx(x.o.ev)) col.append(halo(x.o.s, x.o.e, ds, pxPerMs, cssVar('--love') + (x.o.ev.status === 'confirmed' ? '66' : '38'), `${8 + x.lane * w}%`, `calc(${w}% - 2px)`, 3, FUZZ_PLAN));
       const node = el('div', { class: 'plan ' + (x.o.ev.status === 'confirmed' ? 'conf' : 'prop'), style: { ...place(x.o.ev, topN(x.s), htN(x.s, x.e)), left: `${8 + x.lane * w}%`, width: `calc(${w}% - 2px)` }, title: planTip(x.o) },
         planCard(x.o, h));
       node._click = () => planDialog(x.o);
