@@ -109,6 +109,12 @@ body.dragging, body.dragging * { cursor: grabbing !important; user-select: none 
 .plan, .av { cursor: grab; touch-action: pan-y; }
 .plan::after, .av::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 6px; cursor: ns-resize; }
 .moving { opacity: .35; }
+/* approximate times: soft edges centred on the start/end (6px fade each way), and a slight soft side */
+.fuzzy { padding-top: 7px;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 12px, #000 calc(100% - 12px), transparent 100%), linear-gradient(to right, transparent 0, #000 3px, #000 calc(100% - 3px), transparent 100%);
+  -webkit-mask-composite: source-in; mask-image: linear-gradient(to bottom, transparent 0, #000 12px, #000 calc(100% - 12px), transparent 100%), linear-gradient(to right, transparent 0, #000 3px, #000 calc(100% - 3px), transparent 100%);
+  mask-composite: intersect; }
+.plan.fuzzy { box-shadow: none; }
 .plan b { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .plan .em { letter-spacing: 1px; white-space: nowrap; overflow: hidden; }
 .plan .wait { opacity: .75; font-size: 10px; }
@@ -201,6 +207,6 @@ table.st td.num { text-align: right; font-variant-numeric: tabular-nums; white-s
 </main>
 <dialog id="dlg"></dialog>
 <div id="toast"></div>
-<script type="module" src="app.js?v=10"></script>
+<script type="module" src="app.js?v=11"></script>
 </body>
 </html>

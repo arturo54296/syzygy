@@ -1,6 +1,6 @@
-import { openStore, makeKey } from './store.js?v=10';
-import { SEED, SEED_VERSION } from './activities.js?v=10';
-import * as G from './gcal.js?v=10';
+import { openStore, makeKey } from './store.js?v=11';
+import { SEED, SEED_VERSION } from './activities.js?v=11';
+import * as G from './gcal.js?v=11';
 
 const MIN = 60e3, HOUR = 36e5, DAY = 864e5, SNAP = 15 * MIN;
 const PEOPLE = { arturo: { name: 'Arturo', css: '--arturo' }, zosia: { name: 'Zosia', css: '--zosia' } };
@@ -191,6 +191,17 @@ function layoutLanes(items) {
   return items;
 }
 
+// Times are approximate unless the event is marked exact: shown as "~" and as a block with soft (fuzzy) edges.
+const approx = ev => !ev.exact;
+const span = (ev, s, e) => `${approx(ev) ? '~' : ''}${hhmm(s)}–${hhmmEnd(e)}`;
+const FZ = 6;   // px the soft edge reaches beyond the time
+const place = (ev, top, h) => approx(ev) ? { top: `${top - FZ}px`, height: `${h + 2 * FZ}px` } : { top: `${top}px`, height: `${h}px` };
+function exactInput(ev) {
+  const cb = el('input', { type: 'checkbox', checked: !!ev?.exact });
+  return { node: el('div', { class: 'row' }, el('label', {}, 'Time'), el('label', { style: { minWidth: 0, color: 'var(--ink)' } }, cb, ' Exact time'),
+    el('span', { class: 'hint' }, 'unticked = approximate (soft edges, “~”)')), read: () => cb.checked };
+}
+
 function planHeadline(ev) {
   // own title if given; otherwise the final choice, or the only idea; several ideas and no decision = "Undecided plan"
   if (ev.title) return ev.title;
@@ -201,7 +212,7 @@ function planCard(o, h) {
   const ev = o.ev, v = votesOf(ev), m = matchedIds(ev), rest = votedIds(ev).filter(id => !m.includes(id));
   const em = id => actById(id)?.emoji || '•';
   const kids = [el('b', {}, (ev.status === 'confirmed' ? '✓ ' : '') + planHeadline(ev) + (o.rep ? ' ↻' : ''))];
-  if (h >= 28) kids.push(el('div', {}, `${hhmm(o.s)}–${hhmmEnd(o.e)}`));
+  if (h >= 28) kids.push(el('div', {}, span(ev, o.s, o.e)));
   if (h >= 42 && ev.status !== 'confirmed') kids.push(el('div', { class: 'em' }, m.length ? '❤ ' + m.map(em).join('') + (rest.length ? ' · ' : '') : '', rest.map(em).join('')));
   const waiting = WHO.filter(p => !v[p].length);
   if (h >= 56 && waiting.length && ev.status !== 'confirmed') kids.push(el('div', { class: 'wait' }, `⏳ waiting for ${waiting.map(p => PEOPLE[p].name).join(', ')}`));
@@ -210,7 +221,7 @@ function planCard(o, h) {
 }
 function planTip(o) {
   const ev = o.ev, v = votesOf(ev), m = matchedIds(ev);
-  return [`${planHeadline(ev)} · ${ev.status === 'confirmed' ? 'confirmed' : 'proposed'}${o.rep ? ' · repeats' : ''}`, `${dayName(o.s)} ${hhmm(o.s)}–${hhmmEnd(o.e)}`,
+  return [`${planHeadline(ev)} · ${ev.status === 'confirmed' ? 'confirmed' : 'proposed'}${o.rep ? ' · repeats' : ''}`, `${dayName(o.s)} ${span(ev, o.s, o.e)}`,
     m.length ? `❤ Both want: ${m.map(id => actLabel(actById(id))).join(', ')}` : 'No match yet',
     ...WHO.map(p => `${PEOPLE[p].name}: ${v[p].length ? v[p].map(id => actById(id)?.emoji || '•').join(' ') : '(no votes yet)'}`),
     ev.note || null].filter(Boolean).join('\n');
@@ -239,6 +250,7 @@ function renderCalendar(days) {
     const col = el('div', { class: 'col' + (today ? ' today' : '') });
     col._ds = ds; col._ppm = pxPerMs;
     const top = t => `${(Math.max(t, ds) - ds) * pxPerMs}px`;
+    const topN = t => (Math.max(t, ds) - ds) * pxPerMs, htN = (s, e) => Math.max((Math.min(e, de) - Math.max(s, ds)) * pxPerMs, 3);
     const ht = (s, e) => `${Math.max((Math.min(e, de) - Math.max(s, ds)) * pxPerMs, 3)}px`;
     // my Google busy times (only on this device, only for me), under everything else
     if (me && busy.key === rangeKey()) for (const b of busy.list.filter(b => b.e > ds && b.s < de))
@@ -249,8 +261,8 @@ function renderCalendar(days) {
       const items = layoutLanes(occ.filter(o => o.ev.kind === 'avail' && o.ev.who === who).map(o => ({ o, s: Math.max(o.s, ds), e: Math.min(o.e, de) })));
       for (const x of items) {
         const o = x.o, w = 50 / x.lanes;
-        const node = el('div', { class: 'av', style: { top: top(x.s), height: ht(x.s, x.e), left: `${i * 50 + x.lane * w}%`, width: `calc(${w}% - 1px)`, ...availStyle(who, o.ev.level) },
-          title: `${PEOPLE[who].name} is ${LEVEL[o.ev.level]}${o.rep ? ' (repeats)' : ''}\n${hhmm(o.s)}–${hhmmEnd(o.e)}${o.ev.note ? '\n' + o.ev.note : ''}` });
+        const node = el('div', { class: 'av' + (approx(o.ev) ? ' fuzzy' : ''), style: { ...place(o.ev, topN(x.s), htN(x.s, x.e)), left: `${i * 50 + x.lane * w}%`, width: `calc(${w}% - 1px)`, ...availStyle(who, o.ev.level) },
+          title: `${PEOPLE[who].name} is ${LEVEL[o.ev.level]}${o.rep ? ' (repeats)' : ''}\n${span(o.ev, o.s, o.e)}${o.ev.note ? '\n' + o.ev.note : ''}` });
         if ((x.e - x.s) * pxPerMs >= 26) node.append(el('span', {}, PEOPLE[who].name), el('span', {}, LEVEL[o.ev.level] + (o.rep ? ' ↻' : '')));
         else if ((x.e - x.s) * pxPerMs >= 13) node.append(el('span', {}, `${PEOPLE[who].name[0]} · ${LEVEL[o.ev.level]}`));
         if (o.ev.note) node.append(el('div', { class: 'nt' }, o.ev.note));   // the note goes last; cut off if the block is short
@@ -265,7 +277,7 @@ function renderCalendar(days) {
         m.level === 2 ? '❤ plan' : '❤ maybe') : null));
     for (const x of layoutLanes(plans.map(o => ({ o, s: Math.max(o.s, ds), e: Math.min(o.e, de) })))) {
       const h = (x.e - x.s) * pxPerMs, w = 84 / x.lanes;
-      const node = el('div', { class: 'plan ' + (x.o.ev.status === 'confirmed' ? 'conf' : 'prop'), style: { top: top(x.s), height: ht(x.s, x.e), left: `${8 + x.lane * w}%`, width: `calc(${w}% - 2px)` }, title: planTip(x.o) },
+      const node = el('div', { class: 'plan ' + (x.o.ev.status === 'confirmed' ? 'conf' : 'prop') + (approx(x.o.ev) ? ' fuzzy' : ''), style: { ...place(x.o.ev, topN(x.s), htN(x.s, x.e)), left: `${8 + x.lane * w}%`, width: `calc(${w}% - 2px)` }, title: planTip(x.o) },
         planCard(x.o, h));
       node._click = () => planDialog(x.o);
       node._occ = x.o;
@@ -653,7 +665,7 @@ function newDialog(s, e, opts = {}) {
   let kind = opts.kind || 'plan', who = me;
   const fx0 = (opts.acts || []).map(id => fixedRange(actById(id), s)).find(Boolean);
   if (fx0) [s, e] = fx0;
-  const ti = timeInputs(s, e), rp = repeatInputs(null);
+  const ti = timeInputs(s, e), rp = repeatInputs(null), ex = exactInput(null);
   const mine = new Set(opts.acts || []);
   const f = { ...filt, q: '', archived: false };
   const pk = picker({ mine, f, onChange: (a, add) => applyFixed(ti, a, add) });
@@ -666,7 +678,7 @@ function newDialog(s, e, opts = {}) {
   dialog('New', [
     el('section', {}, el('div', { class: 'row' }, segCtl([['plan', '💞 Plan together'], ['free', 'Free'], ['flex', 'Flexible']], kind, v => { kind = v; sync(); })),
       whoPart, el('p', { class: 'hint', style: { margin: '0 0 8px' } }, '“Free” = this time is yours to plan. “Flexible” = could be free if needed.')),
-    el('section', {}, ti.nodes, rp.node),
+    el('section', {}, ti.nodes, rp.node, ex.node),
     planPart,
     note,
     el('div', { class: 'actions' }, el('span', { class: 'spacer' }), el('button', { onclick: close }, 'Cancel'), el('button', { class: 'primary', onclick: save }, 'Save')),
@@ -675,7 +687,7 @@ function newDialog(s, e, opts = {}) {
   function save() {
     let t, repeat;
     try { t = ti.read(); repeat = rp.read(); } catch { return; }
-    const base = { id: uid(), s: t[0], e: t[1], repeat, note: note.value.trim(), created: Date.now(), by: me };
+    const base = { id: uid(), s: t[0], e: t[1], exact: ex.read(), repeat, note: note.value.trim(), created: Date.now(), by: me };
     if (kind === 'plan') {
       if (!mine.size) return toast('Pick at least one activity');
       store.put('events', { ...base, kind: 'plan', title: title.value.trim(), votes: { [me]: [...mine], [OTHER[me]]: [] }, status: 'proposed', chosen: null });
@@ -704,13 +716,13 @@ function shifted(ev, o, t) { const delta = t[0] - o.s; return { s: ev.s + delta,
 function availDialog(o) {
   const ev = o.ev;
   let who = ev.who, level = ev.level;
-  const ti = timeInputs(o.s, o.e), rp = repeatInputs(ev.repeat);
+  const ti = timeInputs(o.s, o.e), rp = repeatInputs(ev.repeat), ex = exactInput(ev);
   const note = el('textarea', { rows: 2, placeholder: 'Note (optional)', value: ev.note || '' });
   dialog(`${PEOPLE[ev.who].name} is ${LEVEL[ev.level]}`, [
     el('section', {},
       el('div', { class: 'row' }, el('label', {}, 'Who'), segCtl(WHO.map(p => [p, PEOPLE[p].name]), who, v => { who = v; })),
       el('div', { class: 'row' }, el('label', {}, 'Is'), segCtl([['free', 'Free'], ['flex', 'Flexible']], level, v => { level = v; }))),
-    el('section', {}, ti.nodes, rp.node, o.rep ? el('p', { class: 'hint' }, 'Changes apply to the whole series.') : null),
+    el('section', {}, ti.nodes, rp.node, ex.node, o.rep ? el('p', { class: 'hint' }, 'Changes apply to the whole series.') : null),
     note,
     el('div', { class: 'actions' }, delBtn(o), occActions(o),
       el('button', { onclick: () => { close(); newDialog(o.s, o.e, { kind: 'plan' }); } }, '💞 Plan here'),
@@ -719,7 +731,7 @@ function availDialog(o) {
         let t, repeat;
         try { t = ti.read(); repeat = rp.read(); } catch { return; }
         const cur = data.events.find(x => x.id === ev.id) || ev;
-        store.put('events', { ...cur, who, level, repeat, note: note.value.trim(), ...shifted(cur, o, t) });
+        store.put('events', { ...cur, who, level, repeat, exact: ex.read(), note: note.value.trim(), ...shifted(cur, o, t) });
         close();
       } }, 'Save')),
   ]);
@@ -730,7 +742,7 @@ function planDialog(o) {
   const ev = o.ev, other = OTHER[me], v = votesOf(ev);
   const mine = new Set(v[me]), otherSet = new Set(v[other]);
   let status = ev.status || 'proposed', chosen = ev.chosen || null;
-  const ti = timeInputs(o.s, o.e), rp = repeatInputs(ev.repeat);
+  const ti = timeInputs(o.s, o.e), rp = repeatInputs(ev.repeat), ex = exactInput(ev);
   const title = el('input', { type: 'text', value: ev.title || '', placeholder: 'Title (optional)', style: { flex: 1 } });
   const note = el('textarea', { rows: 2, placeholder: 'Note (optional)', value: ev.note || '' });
   const f = { ...filt, q: '', archived: false };
@@ -766,7 +778,7 @@ function planDialog(o) {
       el('p', { class: 'hint', style: { margin: 0 } }, `Click to vote. Dots: `, el('span', { style: { color: colorOf(me), fontWeight: 600 } }, PEOPLE[me].name), ' / ', el('span', { style: { color: colorOf(other), fontWeight: 600 } }, PEOPLE[other].name), '. ❤ = you both want it.'),
       fnode, pk.node),
     el('section', {}, el('h3', {}, 'Decision'), decide),
-    el('section', {}, el('h3', {}, 'When'), ti.nodes, rp.node, o.rep ? el('p', { class: 'hint' }, 'Changes apply to the whole series.') : null),
+    el('section', {}, el('h3', {}, 'When'), ti.nodes, rp.node, ex.node, o.rep ? el('p', { class: 'hint' }, 'Changes apply to the whole series.') : null),
     el('div', { class: 'row' }, title), note,
     el('div', { class: 'actions' }, delBtn(o), occActions(o), el('span', { class: 'spacer' }), el('button', { onclick: close }, 'Cancel'),
       el('button', { class: 'primary', onclick: () => {
@@ -779,7 +791,7 @@ function planDialog(o) {
         if (chosen && !union.includes(chosen)) chosen = null;
         if (status === 'confirmed' && !chosen && union.length === 1) chosen = union[0];
         if (status === 'confirmed' && !chosen) return toast('Choose the final activity to confirm (or 🎲 Pick for us)');
-        store.put('events', { ...cur, votes, status, chosen, title: title.value.trim(), note: note.value.trim(), repeat, ...shifted(cur, o, t) });
+        store.put('events', { ...cur, votes, status, chosen, exact: ex.read(), title: title.value.trim(), note: note.value.trim(), repeat, ...shifted(cur, o, t) });
         close();
       } }, 'Save')),
   ]);
@@ -914,6 +926,7 @@ function gBody(ev) {
     summary: `💞 ${planHeadline(ev)}${conf ? '' : ' (proposed)'}`,
     description: [
       conf ? '✓ Confirmed' + (ev.chosen ? `: ${actLabel(actById(ev.chosen))}` : '') : 'Proposed, not decided yet',
+      approx(ev) ? '~ Times are approximate' : null,
       m.length ? `❤ Both want: ${names(m)}` : null,
       ...WHO.map(p => `${PEOPLE[p].name}: ${names(v[p])}`),
       ev.note ? '\n' + ev.note : null,
