@@ -1,5 +1,5 @@
-import { openStore, makeKey } from './store.js?v=4';
-import { SEED, SEED_VERSION } from './activities.js?v=4';
+import { openStore, makeKey } from './store.js?v=5';
+import { SEED, SEED_VERSION } from './activities.js?v=5';
 
 const MIN = 60e3, HOUR = 36e5, DAY = 864e5, SNAP = 15 * MIN;
 const PEOPLE = { arturo: { name: 'Arturo', css: '--arturo' }, zosia: { name: 'Zosia', css: '--zosia' } };
@@ -186,12 +186,10 @@ function layoutLanes(items) {
 }
 
 function planHeadline(ev) {
-  // own title if given; otherwise the idea's name: the final choice, else the matches, else all votes ("🎲 Board games +2")
+  // own title if given; otherwise the final choice, or the only idea; several ideas and no decision = "Undecided plan"
   if (ev.title) return ev.title;
-  const ids = ev.chosen ? [ev.chosen] : matchedIds(ev).length ? matchedIds(ev) : votedIds(ev);
-  const known = ids.filter(id => actById(id));
-  if (!known.length) return 'Plan';
-  return actLabel(actById(known[0])) + (known.length > 1 ? ` +${known.length - 1}` : '');
+  const ids = (ev.chosen ? [ev.chosen] : votedIds(ev)).filter(id => actById(id));
+  return ids.length === 1 ? actLabel(actById(ids[0])) : 'Undecided plan';
 }
 function planCard(o, h) {
   const ev = o.ev, v = votesOf(ev), m = matchedIds(ev), rest = votedIds(ev).filter(id => !m.includes(id));
