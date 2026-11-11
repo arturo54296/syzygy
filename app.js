@@ -1,6 +1,6 @@
-import { openStore, makeKey } from './store.js?v=12';
-import { SEED, SEED_VERSION } from './activities.js?v=12';
-import * as G from './gcal.js?v=12';
+import { openStore, makeKey } from './store.js?v=13';
+import { SEED, SEED_VERSION } from './activities.js?v=13';
+import * as G from './gcal.js?v=13';
 
 const MIN = 60e3, HOUR = 36e5, DAY = 864e5, SNAP = 15 * MIN;
 const PEOPLE = { arturo: { name: 'Arturo', css: '--arturo' }, zosia: { name: 'Zosia', css: '--zosia' } };
@@ -191,11 +191,22 @@ function layoutLanes(items) {
   return items;
 }
 
-// Times are approximate unless the event is marked exact: shown as "~" and as a block with soft (fuzzy) edges.
+// Times are approximate unless the event is marked exact: shown as "~" and with a colour gradient (halo) that
+// spreads outwards from the block: FUZZ before the start and after the end, and FUZZ_X px to each side.
 const approx = ev => !ev.exact;
 const span = (ev, s, e) => `${approx(ev) ? '~' : ''}${hhmm(s)}–${hhmmEnd(e)}`;
-const FZ = 6;   // px the soft edge reaches beyond the time
-const place = (ev, top, h) => approx(ev) ? { top: `${top - FZ}px`, height: `${h + 2 * FZ}px` } : { top: `${top}px`, height: `${h}px` };
+const FUZZ = 1.5 * HOUR, FUZZ_X = 10;
+const cssVar = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+/** Halo behind a block: [s, e] = the occurrence's real times (not cut at midnight), left/width = the block's CSS. */
+function halo(s, e, ds, ppm, color, left, width, z) {
+  const f = FUZZ * ppm;
+  return el('div', { class: 'halo', style: {
+    top: `${(s - FUZZ - ds) * ppm}px`, height: `${(e - s + 2 * FUZZ) * ppm}px`, zIndex: z,
+    left: `calc(${left} - ${FUZZ_X}px)`, width: `calc(${width} + ${2 * FUZZ_X}px)`,
+    background: `linear-gradient(to bottom, transparent 0, ${color} ${f}px, ${color} calc(100% - ${f}px), transparent 100%)`,
+    '--fx': `${FUZZ_X}px` } });
+}
+const place = (ev, top, h) => ({ top: `${top}px`, height: `${h}px` });
 function exactInput(ev) {
   const cb = el('input', { type: 'checkbox', checked: !!ev?.exact });
   return { node: el('div', { class: 'row' }, el('label', {}, 'Time'), el('label', { style: { minWidth: 0, color: 'var(--ink)' } }, cb, ' Exact time'),
@@ -278,7 +289,8 @@ function renderCalendar(days) {
       const items = layoutLanes(occ.filter(o => o.ev.kind === 'avail' && o.ev.who === who).map(o => ({ o, s: Math.max(o.s, ds), e: Math.min(o.e, de) })));
       for (const x of items) {
         const o = x.o, w = 50 / x.lanes;
-        const node = el('div', { class: 'av' + (approx(o.ev) ? ' fuzzy' : ''), style: { ...place(o.ev, topN(x.s), htN(x.s, x.e)), left: `${i * 50 + x.lane * w}%`, width: `calc(${w}% - 1px)`, ...availStyle(who, o.ev.level) },
+        if (approx(o.ev)) col.append(halo(o.s, o.e, ds, pxPerMs, colorOf(who) + '66', `${i * 50 + x.lane * w}%`, `calc(${w}% - 1px)`, 0));
+        const node = el('div', { class: 'av', style: { ...place(o.ev, topN(x.s), htN(x.s, x.e)), left: `${i * 50 + x.lane * w}%`, width: `calc(${w}% - 1px)`, ...availStyle(who, o.ev.level) },
           title: `${PEOPLE[who].name} is ${LEVEL[o.ev.level]}${o.rep ? ' (repeats)' : ''}\n${span(o.ev, o.s, o.e)}${o.ev.note ? '\n' + o.ev.note : ''}` });
         node.append(el('span', {}, PEOPLE[who].name), el('span', {}, LEVEL[o.ev.level] + (o.rep ? ' ↻' : '')));
         if (o.ev.note) node.append(el('div', { class: 'nt' }, o.ev.note));   // the note goes last; cut off if the block is short
@@ -293,7 +305,8 @@ function renderCalendar(days) {
         m.level === 2 ? '❤ plan' : '❤ maybe') : null));
     for (const x of layoutLanes(plans.map(o => ({ o, s: Math.max(o.s, ds), e: Math.min(o.e, de) })))) {
       const h = (x.e - x.s) * pxPerMs, w = 84 / x.lanes;
-      const node = el('div', { class: 'plan ' + (x.o.ev.status === 'confirmed' ? 'conf' : 'prop') + (approx(x.o.ev) ? ' fuzzy' : ''), style: { ...place(x.o.ev, topN(x.s), htN(x.s, x.e)), left: `${8 + x.lane * w}%`, width: `calc(${w}% - 2px)` }, title: planTip(x.o) },
+      if (approx(x.o.ev)) col.append(halo(x.o.s, x.o.e, ds, pxPerMs, cssVar('--love') + (x.o.ev.status === 'confirmed' ? '66' : '38'), `${8 + x.lane * w}%`, `calc(${w}% - 2px)`, 3));
+      const node = el('div', { class: 'plan ' + (x.o.ev.status === 'confirmed' ? 'conf' : 'prop'), style: { ...place(x.o.ev, topN(x.s), htN(x.s, x.e)), left: `${8 + x.lane * w}%`, width: `calc(${w}% - 2px)` }, title: planTip(x.o) },
         planCard(x.o, h));
       node._click = () => planDialog(x.o);
       node._occ = x.o;
