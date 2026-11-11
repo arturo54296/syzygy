@@ -1,6 +1,6 @@
 // Data layer. Firestore when config.js has a config, otherwise a demo store in localStorage
 // (synced live between tabs of the same browser, handy for testing both people side by side).
-import { firebaseConfig } from './config.js?v=15';
+import { firebaseConfig } from './config.js?v=16';
 
 const FIREBASE_VERSION = '10.12.2';
 const COLLS = ['events', 'activities', 'meta'];   // meta: shared settings (e.g. the Google calendar) and sync state

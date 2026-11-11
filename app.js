@@ -1,6 +1,6 @@
-import { openStore, makeKey } from './store.js?v=15';
-import { SEED, SEED_VERSION } from './activities.js?v=15';
-import * as G from './gcal.js?v=15';
+import { openStore, makeKey } from './store.js?v=16';
+import { SEED, SEED_VERSION } from './activities.js?v=16';
+import * as G from './gcal.js?v=16';
 
 const MIN = 60e3, HOUR = 36e5, DAY = 864e5, SNAP = 15 * MIN;
 const PEOPLE = { arturo: { name: 'Arturo', css: '--arturo' }, zosia: { name: 'Zosia', css: '--zosia' } };
@@ -966,6 +966,7 @@ function gBody(ev) {
     end: { dateTime: localISO(ev.e), timeZone: TZ },
     transparency: conf ? 'opaque' : 'transparent',   // proposed plans don't block your time
     status: 'confirmed',                              // also brings back an event that was deleted in Google
+    extendedProperties: { private: { together: ev.id } },   // hidden "made by Together" mark, checked before any delete
   };
   if (ev.repeat) {
     const st = new Date(ev.s);
@@ -983,9 +984,19 @@ function gSchedule() {
 function gPoke() {
   if (G.hasClient && G.ready() && G.wanted() && gSettings().gcalId && !G.isValid()) G.requestToken('');
 }
+// safety: never sync into someone's main (primary) calendar; checked once per calendar per session
+const safeTargets = {};
+async function isSafeTarget(cal) {
+  if (cal in safeTargets) return safeTargets[cal];
+  try { const c = await G.api('GET', `/users/me/calendarList/${encodeURIComponent(cal)}`); return (safeTargets[cal] = !c.primary); }
+  catch (e) { if (e.code === 'auth') throw e; return false; }   // not in my list = I can't write there anyway
+}
 async function gSync() {
   const cal = gSettings().gcalId;
   if (!G.hasClient || !cal || !G.isValid()) return;
+  let safe = false;
+  try { safe = cal !== 'primary' && await isSafeTarget(cal); } catch { gStatus = 'Google sign-in expired: click 📅 to reconnect'; renderGBtn(); return; }
+  if (!safe) { gStatus = 'Not syncing: choose a shared calendar, not your main one (📅)'; renderGBtn(); return; }
   if (gBusyNow) { gAgain = true; return; }
   gBusyNow = true; renderGBtn();
   const C = `/calendars/${encodeURIComponent(cal)}/events`;
@@ -1001,7 +1012,11 @@ async function gSync() {
       n++;
     }
     for (const id of Object.keys(prev)) if (!next[id]) {
-      try { await G.api('DELETE', `${C}/${gid(id)}`); } catch (e) { if (![404, 410].includes(e.status)) throw e; }
+      // safety: only delete an event that carries our mark for this exact plan; anything else is left alone
+      try {
+        const g = await G.api('GET', `${C}/${gid(id)}`);
+        if (g?.extendedProperties?.private?.together === id && g.status !== 'cancelled') await G.api('DELETE', `${C}/${gid(id)}`);
+      } catch (e) { if (![404, 410].includes(e.status)) throw e; }
       n++;
     }
     if (n || st?.cal !== cal) await store.put('meta', { id: 'gsync', cal, ids: next, at: Date.now() });
@@ -1057,7 +1072,8 @@ function gcalDialog() {
     pickBox.replaceChildren(el('p', { class: 'hint' }, 'Loading your calendars…'));
     try {
       const r = await G.api('GET', '/users/me/calendarList', null, { minAccessRole: 'writer' });
-      const items = (r.items || []).sort((a, b) => (a.primary ? 1 : 0) - (b.primary ? 1 : 0) || a.summary.localeCompare(b.summary));
+      const items = (r.items || []).filter(c => !c.primary).sort((a, b) => a.summary.localeCompare(b.summary));   // your main calendar is never offered
+      if (!items.length) return pickBox.replaceChildren(el('p', {}, 'No shared calendar found. Create “Us” in Google Calendar first (see below), then try again.'));
       const sel = el('select', {}, items.map(c => el('option', { value: c.id, selected: c.id === s.gcalId }, c.summaryOverride || c.summary + (c.primary ? ' (your main calendar)' : ''))));
       pickBox.replaceChildren(el('div', { class: 'row' }, sel, el('button', { class: 'primary', onclick: async () => {
         const c = items.find(x => x.id === sel.value);
