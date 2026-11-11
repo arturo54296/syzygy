@@ -1,6 +1,6 @@
-import { openStore, makeKey } from './store.js?v=19';
-import { SEED, SEED_VERSION } from './activities.js?v=19';
-import * as G from './gcal.js?v=19';
+import { openStore, makeKey } from './store.js?v=20';
+import { SEED, SEED_VERSION } from './activities.js?v=20';
+import * as G from './gcal.js?v=20';
 
 const MIN = 60e3, HOUR = 36e5, DAY = 864e5, SNAP = 15 * MIN;
 const PEOPLE = { arturo: { name: 'Arturo', css: '--arturo' }, zosia: { name: 'Zosia', css: '--zosia' } };
@@ -706,7 +706,7 @@ function newDialog(s, e, opts = {}) {
   const whoPart = el('div', { class: 'row' }, el('label', {}, 'Who'), segCtl(WHO.map(p => [p, PEOPLE[p].name]), who, v => { who = v; }));
   const sync = () => { planPart.style.display = kind === 'plan' ? '' : 'none'; whoPart.style.display = kind === 'plan' ? 'none' : ''; };
   dialog('New', [
-    el('section', {}, el('div', { class: 'row' }, segCtl([['plan', '✨ Plan together'], ['free', 'Free'], ['flex', 'Flexible']], kind, v => { kind = v; sync(); })),
+    el('section', {}, el('div', { class: 'row' }, segCtl([['plan', '🪐 Plan together'], ['free', 'Free'], ['flex', 'Flexible']], kind, v => { kind = v; sync(); })),
       whoPart, el('p', { class: 'hint', style: { margin: '0 0 8px' } }, '“Free” = this time is yours to plan. “Flexible” = could be free if needed.')),
     el('section', {}, ti.nodes, rp.node, ex.node),
     planPart,
@@ -755,7 +755,7 @@ function availDialog(o) {
     el('section', {}, ti.nodes, rp.node, ex.node, o.rep ? el('p', { class: 'hint' }, 'Changes apply to the whole series.') : null),
     note,
     el('div', { class: 'actions' }, delBtn(o), occActions(o),
-      el('button', { onclick: () => { close(); newDialog(o.s, o.e, { kind: 'plan' }); } }, '✨ Plan here'),
+      el('button', { onclick: () => { close(); newDialog(o.s, o.e, { kind: 'plan' }); } }, '🪐 Plan here'),
       el('span', { class: 'spacer' }),
       el('button', { class: 'primary', onclick: () => {
         let t, repeat;
