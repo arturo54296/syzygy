@@ -1,5 +1,5 @@
-import { openStore, makeKey } from './store.js?v=6';
-import { SEED, SEED_VERSION } from './activities.js?v=6';
+import { openStore, makeKey } from './store.js?v=7';
+import { SEED, SEED_VERSION } from './activities.js?v=7';
 
 const MIN = 60e3, HOUR = 36e5, DAY = 864e5, SNAP = 15 * MIN;
 const PEOPLE = { arturo: { name: 'Arturo', css: '--arturo' }, zosia: { name: 'Zosia', css: '--zosia' } };
@@ -665,7 +665,10 @@ function planDialog(o) {
           chosen = pool[Math.floor(Math.random() * pool.length)];
           drawInfo(); toast(`🎲 ${actLabel(actById(chosen))}`);
         } }, '🎲 Pick for us')),
-      el('div', { class: 'row' }, el('label', {}, 'Status'), segCtl([['proposed', 'Proposed'], ['confirmed', '✓ Confirmed']], status, val => { status = val; })));
+      el('div', { class: 'row' }, el('label', {}, 'Status'), segCtl([['proposed', 'Proposed'], ['confirmed', '✓ Confirmed']], status, val => {
+        status = val;
+        if (val === 'confirmed' && !chosen && union.length === 1) { chosen = union[0]; drawInfo(); }   // only one idea: that's the final one
+      })));
   };
   drawInfo();
   dialog(`💞 ${planHeadline(ev)}`, [
@@ -685,6 +688,7 @@ function planDialog(o) {
         const union = [...new Set([...votes.arturo, ...votes.zosia])];
         if (!union.length) return toast('At least one activity must stay selected');
         if (chosen && !union.includes(chosen)) chosen = null;
+        if (status === 'confirmed' && !chosen && union.length === 1) chosen = union[0];
         if (status === 'confirmed' && !chosen) return toast('Choose the final activity to confirm (or 🎲 Pick for us)');
         store.put('events', { ...cur, votes, status, chosen, title: title.value.trim(), note: note.value.trim(), repeat, ...shifted(cur, o, t) });
         close();
