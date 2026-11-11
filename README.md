@@ -1,6 +1,6 @@
-# Together
+# Syzygy
 
-A shared calendar for two people to find time together and decide what to do.
+A shared calendar for two people, for when your free times align (a syzygy is when planets line up), to find time together and decide what to do.
 It's a static site with no backend: the data lives in Firebase Firestore, and there is no login.
 
 ## Features

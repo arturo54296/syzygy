@@ -1,6 +1,6 @@
-import { openStore, makeKey } from './store.js?v=18';
-import { SEED, SEED_VERSION } from './activities.js?v=18';
-import * as G from './gcal.js?v=18';
+import { openStore, makeKey } from './store.js?v=19';
+import { SEED, SEED_VERSION } from './activities.js?v=19';
+import * as G from './gcal.js?v=19';
 
 const MIN = 60e3, HOUR = 36e5, DAY = 864e5, SNAP = 15 * MIN;
 const PEOPLE = { arturo: { name: 'Arturo', css: '--arturo' }, zosia: { name: 'Zosia', css: '--zosia' } };
@@ -451,7 +451,7 @@ function renderAside() {
       el('span', { class: 'cnt' }, fmtH(m.e - m.s)))))
       : el('p', { class: 'hint' }, 'No shared free time in the next two weeks yet. Add when you’re free or flexible: drag on the calendar or press ＋ New.'),
 
-    el('h2', {}, el('span', {}, '💞 Upcoming plans')),
+    el('h2', {}, el('span', {}, '🪐 Upcoming plans')),
     plans.length ? el('ul', { class: 'list' }, plans.map(o => {
       const m = matchedIds(o.ev);
       return el('li', { onclick: () => planDialog(o) },
@@ -706,7 +706,7 @@ function newDialog(s, e, opts = {}) {
   const whoPart = el('div', { class: 'row' }, el('label', {}, 'Who'), segCtl(WHO.map(p => [p, PEOPLE[p].name]), who, v => { who = v; }));
   const sync = () => { planPart.style.display = kind === 'plan' ? '' : 'none'; whoPart.style.display = kind === 'plan' ? 'none' : ''; };
   dialog('New', [
-    el('section', {}, el('div', { class: 'row' }, segCtl([['plan', '💞 Plan together'], ['free', 'Free'], ['flex', 'Flexible']], kind, v => { kind = v; sync(); })),
+    el('section', {}, el('div', { class: 'row' }, segCtl([['plan', '✨ Plan together'], ['free', 'Free'], ['flex', 'Flexible']], kind, v => { kind = v; sync(); })),
       whoPart, el('p', { class: 'hint', style: { margin: '0 0 8px' } }, '“Free” = this time is yours to plan. “Flexible” = could be free if needed.')),
     el('section', {}, ti.nodes, rp.node, ex.node),
     planPart,
@@ -755,7 +755,7 @@ function availDialog(o) {
     el('section', {}, ti.nodes, rp.node, ex.node, o.rep ? el('p', { class: 'hint' }, 'Changes apply to the whole series.') : null),
     note,
     el('div', { class: 'actions' }, delBtn(o), occActions(o),
-      el('button', { onclick: () => { close(); newDialog(o.s, o.e, { kind: 'plan' }); } }, '💞 Plan here'),
+      el('button', { onclick: () => { close(); newDialog(o.s, o.e, { kind: 'plan' }); } }, '✨ Plan here'),
       el('span', { class: 'spacer' }),
       el('button', { class: 'primary', onclick: () => {
         let t, repeat;
@@ -802,7 +802,7 @@ function planDialog(o) {
       })));
   };
   drawInfo();
-  dialog(`💞 ${planHeadline(ev)}`, [
+  dialog(`🪐 ${planHeadline(ev)}`, [
     el('section', {}, matchBox),
     el('section', {}, el('h3', {}, `Your votes (${PEOPLE[me].name})`),
       el('p', { class: 'hint', style: { margin: 0 } }, `Click to vote. Dots: `, el('span', { style: { color: colorOf(me), fontWeight: 600 } }, PEOPLE[me].name), ' / ', el('span', { style: { color: colorOf(other), fontWeight: 600 } }, PEOPLE[other].name), '. ❤ = you both want it.'),
@@ -953,20 +953,20 @@ function gBody(ev) {
   const v = votesOf(ev), m = matchedIds(ev), conf = ev.status === 'confirmed';
   const names = ids => ids.map(id => actLabel(actById(id))).join(', ') || '(no votes yet)';
   const body = {
-    summary: `💞 ${planHeadline(ev)}${conf ? '' : ' (proposed)'}`,
+    summary: `🪐 ${planHeadline(ev)}${conf ? '' : ' (proposed)'}`,
     description: [
       conf ? '✓ Confirmed' + (ev.chosen ? `: ${actLabel(actById(ev.chosen))}` : '') : 'Proposed, not decided yet',
       approx(ev) ? '~ Times are approximate' : null,
       m.length ? `❤ Both want: ${names(m)}` : null,
       ...WHO.map(p => `${PEOPLE[p].name}: ${names(v[p])}`),
       ev.note ? '\n' + ev.note : null,
-      `\nPlan it in Together: ${appUrl()}`,
+      `\nPlan it in Syzygy: ${appUrl()}`,
     ].filter(x => x !== null).join('\n'),
     start: { dateTime: localISO(ev.s), timeZone: TZ },
     end: { dateTime: localISO(ev.e), timeZone: TZ },
     transparency: conf ? 'opaque' : 'transparent',   // proposed plans don't block your time
     status: 'confirmed',                              // also brings back an event that was deleted in Google
-    extendedProperties: { private: { together: ev.id } },   // hidden "made by Together" mark, checked before any delete
+    extendedProperties: { private: { syzygy: ev.id } },   // hidden "made by Syzygy" mark, checked before any delete
   };
   if (ev.repeat) {
     const st = new Date(ev.s);
@@ -1015,7 +1015,7 @@ async function gSync() {
       // safety: only delete an event that carries our mark for this exact plan; anything else is left alone
       try {
         const g = await G.api('GET', `${C}/${gid(id)}`);
-        if (g?.extendedProperties?.private?.together === id && g.status !== 'cancelled') await G.api('DELETE', `${C}/${gid(id)}`);
+        if ([g?.extendedProperties?.private?.syzygy, g?.extendedProperties?.private?.together].includes(id) && g.status !== 'cancelled') await G.api('DELETE', `${C}/${gid(id)}`);
       } catch (e) { if (![404, 410].includes(e.status)) throw e; }
       n++;
     }
@@ -1138,7 +1138,7 @@ let resizeT; addEventListener('resize', () => { clearTimeout(resizeT); resizeT =
 function setStatus(cls, text) { const s = $('#status'); s.className = cls; s.lastElementChild.textContent = text; }
 /** Without a valid key the whole page is replaced by this message: nothing of the app is left to use. */
 function lockScreen(reason) {
-  document.title = 'Together · locked';
+  document.title = 'Syzygy · locked';
   document.body.replaceChildren(el('div', { class: 'lock' }, el('div', { class: 'lockbox' },
     el('div', { class: 'big' }, '🔒'),
     el('h2', {}, reason),
@@ -1149,7 +1149,7 @@ async function boot(fresh = false) {
   const fromHash = (location.hash.match(/k=([a-z0-9]+)/i) || [])[1];
   const key = fromHash || LS.get('key', null);   // a device that opened the full link once remembers its key
   if (location.hash === '#new') {   // hidden: make a brand-new calendar (only via ".../#new")
-    dialog('💞 New shared calendar', [
+    dialog('🪐 New shared calendar', [
       el('p', {}, 'This creates a new, empty shared calendar with its own secret link.'),
       el('div', { class: 'actions' }, el('span', { class: 'spacer' }), el('button', { class: 'primary', onclick: () => {
         location.hash = 'k=' + makeKey(); close(); boot(true);
