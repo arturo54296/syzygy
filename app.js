@@ -1,6 +1,6 @@
-import { openStore, makeKey } from './store.js?v=20';
-import { SEED, SEED_VERSION } from './activities.js?v=20';
-import * as G from './gcal.js?v=20';
+import { openStore, makeKey } from './store.js?v=21';
+import { SEED, SEED_VERSION } from './activities.js?v=21';
+import * as G from './gcal.js?v=21';
 
 const MIN = 60e3, HOUR = 36e5, DAY = 864e5, SNAP = 15 * MIN;
 const PEOPLE = { arturo: { name: 'Arturo', css: '--arturo' }, zosia: { name: 'Zosia', css: '--zosia' } };
