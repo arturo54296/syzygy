@@ -1,6 +1,6 @@
-import { openStore, makeKey } from './store.js?v=21';
-import { SEED, SEED_VERSION } from './activities.js?v=21';
-import * as G from './gcal.js?v=21';
+import { openStore, makeKey } from './store.js?v=22';
+import { SEED, SEED_VERSION } from './activities.js?v=22';
+import * as G from './gcal.js?v=22';
 
 const MIN = 60e3, HOUR = 36e5, DAY = 864e5, SNAP = 15 * MIN;
 const PEOPLE = { arturo: { name: 'Arturo', css: '--arturo' }, zosia: { name: 'Zosia', css: '--zosia' } };
@@ -241,7 +241,7 @@ function planCard(o, h) {
   const em = id => actById(id)?.emoji || '•';
   const kids = [el('b', {}, (ev.status === 'confirmed' ? '✓ ' : '') + planHeadline(ev) + (o.rep ? ' ↻' : ''))];
   kids.push(el('div', {}, span(ev, o.s, o.e)));
-  if (ev.status !== 'confirmed') kids.push(el('div', { class: 'em' }, m.length ? '❤ ' + m.map(em).join('') + (rest.length ? ' · ' : '') : '', rest.map(em).join('')));
+  if (ev.status !== 'confirmed') kids.push(el('div', { class: 'em' }, m.length ? '☌ ' + m.map(em).join('') + (rest.length ? ' · ' : '') : '', rest.map(em).join('')));
   const waiting = WHO.filter(p => !v[p].length);
   if (waiting.length && ev.status !== 'confirmed') kids.push(el('div', { class: 'wait' }, `⏳ waiting for ${waiting.map(p => PEOPLE[p].name).join(', ')}`));
   if (ev.note) kids.push(el('div', { class: 'nt' }, ev.note));   // the note goes last
@@ -250,7 +250,7 @@ function planCard(o, h) {
 function planTip(o) {
   const ev = o.ev, v = votesOf(ev), m = matchedIds(ev);
   return [`${planHeadline(ev)} · ${ev.status === 'confirmed' ? 'confirmed' : 'proposed'}${o.rep ? ' · repeats' : ''}`, `${dayName(o.s)} ${span(ev, o.s, o.e)}`,
-    m.length ? `❤ Both want: ${m.map(id => actLabel(actById(id))).join(', ')}` : 'No match yet',
+    m.length ? `☌ Both want: ${m.map(id => actLabel(actById(id))).join(', ')}` : 'No match yet',
     ...WHO.map(p => `${PEOPLE[p].name}: ${v[p].length ? v[p].map(id => actById(id)?.emoji || '•').join(' ') : '(no votes yet)'}`),
     ev.note || null].filter(Boolean).join('\n');
 }
@@ -272,7 +272,7 @@ function renderCalendar(days) {
     head.append(el('div', { class: 'dh' + (today ? ' today' : ''), title: 'Add something on this day', onclick: () => newDialog(ds + 10 * HOUR, ds + 22 * HOUR) },
       el('div', { class: 'd' }, dayName(d)),
       el('div', { class: 'chips' },
-        ms.length ? el('span', { class: 'mchip' + (ms.some(m => m.level === 2) ? ' strong' : ''), title: 'Time when you are both free or flexible' }, `❤ ${fmtH(both)}`) : null,
+        ms.length ? el('span', { class: 'mchip' + (ms.some(m => m.level === 2) ? ' strong' : ''), title: 'Time when you are both free or flexible' }, `☌ ${fmtH(both)}`) : null,
         plans.length ? el('span', { class: 'pchip' }, `${plans.length} plan${plans.length > 1 ? 's' : ''}`) : null)));
 
     const col = el('div', { class: 'col' + (today ? ' today' : '') });
@@ -302,7 +302,7 @@ function renderCalendar(days) {
     for (const m of ms) col.append(el('div', { class: 'match' + (m.level === 2 ? ' strong' : ''), style: { top: top(m.s), height: ht(m.s, m.e) },
       title: `${m.level === 2 ? 'You are both free' : 'Both available (at least one only flexible)'}\n${hhmm(m.s)}–${hhmmEnd(m.e)}` },
       (m.e - m.s) * pxPerMs >= 20 ? el('button', { class: 'mbtn', title: 'Plan something in this time', onpointerdown: e => e.stopPropagation(), onclick: () => newDialog(m.s, m.e, { kind: 'plan' }) },
-        m.level === 2 ? '❤ plan' : '❤ maybe') : null));
+        m.level === 2 ? '☌ plan' : '☌ maybe') : null));
     for (const x of layoutLanes(plans.map(o => ({ o, s: Math.max(o.s, ds), e: Math.min(o.e, de) })))) {
       const h = (x.e - x.s) * pxPerMs, w = 84 / x.lanes;
       if (approx(x.o.ev)) col.append(halo(x.o.s, x.o.e, ds, pxPerMs, cssVar('--love') + (x.o.ev.status === 'confirmed' ? '66' : '38'), `${8 + x.lane * w}%`, `calc(${w}% - 2px)`, 3, FUZZ_PLAN));
@@ -443,9 +443,9 @@ function renderAside() {
   const acts = actsSorted().filter(x => passes(x));
 
   a.replaceChildren(
-    el('h2', {}, el('span', {}, '❤ Next times you’re both free')),
+    el('h2', {}, el('span', {}, '☌ Next times you’re both free')),
     ups.length ? el('ul', { class: 'list' }, ups.map(m => el('li', { title: 'Plan something here', onclick: () => newDialog(m.s, m.e, { kind: 'plan' }) },
-      el('span', { class: 'emo' }, m.level === 2 ? '❤' : '♡'),
+      el('span', { class: 'emo' }, m.level === 2 ? '☌' : '☌'),
       el('div', { class: 'n' }, el('div', {}, `${dayName(m.s)} · ${hhmm(m.s)}–${hhmmEnd(m.e)}`),
         el('div', { class: 'tags' }, m.level === 2 ? 'both free' : 'one of you is only flexible')),
       el('span', { class: 'cnt' }, fmtH(m.e - m.s)))))
@@ -455,7 +455,7 @@ function renderAside() {
     plans.length ? el('ul', { class: 'list' }, plans.map(o => {
       const m = matchedIds(o.ev);
       return el('li', { onclick: () => planDialog(o) },
-        el('span', { class: 'emo' }, o.ev.status === 'confirmed' ? (actById(o.ev.chosen)?.emoji || '✓') : (m.length ? '❤' : '?')),
+        el('span', { class: 'emo' }, o.ev.status === 'confirmed' ? (actById(o.ev.chosen)?.emoji || '✓') : (m.length ? '☌' : '?')),
         el('div', { class: 'n' }, el('div', {}, planHeadline(o.ev)),
           el('div', { class: 'tags' }, `${dayName(o.s)} ${hhmm(o.s)} · ${o.ev.status === 'confirmed' ? 'confirmed' : m.length ? `${m.length} match${m.length > 1 ? 'es' : ''}` : 'no match yet'}`)));
     })) : el('p', { class: 'hint' }, 'No plans in the next two weeks.'),
@@ -554,7 +554,7 @@ function addVote(o, a) {
   const v = votesOf(cur);
   if (v[me].includes(a.id)) return toast(`${actLabel(a)} is already in your votes for this plan`);
   store.put('events', { ...cur, votes: { ...v, [me]: [...v[me], a.id] } });
-  toast(v[OTHER[me]].includes(a.id) ? `❤ It’s a match: ${actLabel(a)}` : `Added ${actLabel(a)} to your votes`);
+  toast(v[OTHER[me]].includes(a.id) ? `☌ It’s a match: ${actLabel(a)}` : `Added ${actLabel(a)} to your votes`);
 }
 document.addEventListener('pointermove', e => {
   const st = ideaDrag;
@@ -665,7 +665,7 @@ function picker({ mine, other = new Set(), otherWho = null, f, onChange }) {
       const both = mine.has(a.id) && other.has(a.id);
       return el('button', { type: 'button', class: 'pk' + (both ? ' both' : mine.has(a.id) ? ' mine' : '') + (a.archived ? ' arch' : ''), title: (a.note ? a.note + '\n' : '') + tags(a, true),
         onclick: () => { const add = !mine.has(a.id); add ? mine.add(a.id) : mine.delete(a.id); draw(); onChange?.(a, add); } },
-        both ? '❤ ' : '', `${a.emoji || '•'} ${a.name}`,
+        both ? '☌ ' : '', `${a.emoji || '•'} ${a.name}`,
         el('span', { class: 'dots' },
           mine.has(a.id) ? el('i', { style: { background: colorOf(me) }, title: PEOPLE[me].name }) : null,
           other.has(a.id) && otherWho ? el('i', { style: { background: colorOf(otherWho) }, title: PEOPLE[otherWho].name }) : null));
@@ -783,11 +783,11 @@ function planDialog(o) {
     const m = [...mine].filter(id => otherSet.has(id)), union = [...new Set([...mine, ...otherSet])];
     if (chosen && !union.includes(chosen)) chosen = null;
     matchBox.replaceChildren(m.length
-      ? el('div', { class: 'matchline' }, el('b', {}, '❤ You both want: '), m.map(id => actLabel(actById(id))).join(', '))
+      ? el('div', { class: 'matchline' }, el('b', {}, '☌ You both want: '), m.map(id => actLabel(actById(id))).join(', '))
       : el('div', { class: 'matchline none' }, !otherSet.size ? `${PEOPLE[other].name} hasn’t voted yet.` : !mine.size ? 'You haven’t voted yet.' : 'No match yet: pick some of the other’s ideas too.'));
     const sel = el('select', { onchange: e => { chosen = e.target.value || null; } },
       el('option', { value: '' }, '— not decided —'),
-      union.map(id => el('option', { value: id, selected: id === chosen }, (m.includes(id) ? '❤ ' : '') + actLabel(actById(id)))));
+      union.map(id => el('option', { value: id, selected: id === chosen }, (m.includes(id) ? '☌ ' : '') + actLabel(actById(id)))));
     decide.replaceChildren(
       el('div', { class: 'row' }, el('label', {}, 'Final'), sel,
         el('button', { type: 'button', title: 'Random pick among the matches (or among all votes if there is no match)', onclick: () => {
@@ -805,7 +805,7 @@ function planDialog(o) {
   dialog(`🪐 ${planHeadline(ev)}`, [
     el('section', {}, matchBox),
     el('section', {}, el('h3', {}, `Your votes (${PEOPLE[me].name})`),
-      el('p', { class: 'hint', style: { margin: 0 } }, `Click to vote. Dots: `, el('span', { style: { color: colorOf(me), fontWeight: 600 } }, PEOPLE[me].name), ' / ', el('span', { style: { color: colorOf(other), fontWeight: 600 } }, PEOPLE[other].name), '. ❤ = you both want it.'),
+      el('p', { class: 'hint', style: { margin: 0 } }, `Click to vote. Dots: `, el('span', { style: { color: colorOf(me), fontWeight: 600 } }, PEOPLE[me].name), ' / ', el('span', { style: { color: colorOf(other), fontWeight: 600 } }, PEOPLE[other].name), '. ☌ = you both want it.'),
       fnode, pk.node),
     el('section', {}, el('h3', {}, 'Decision'), decide),
     el('section', {}, el('h3', {}, 'When'), ti.nodes, rp.node, ex.node, o.rep ? el('p', { class: 'hint' }, 'Changes apply to the whole series.') : null),
@@ -957,7 +957,7 @@ function gBody(ev) {
     description: [
       conf ? '✓ Confirmed' + (ev.chosen ? `: ${actLabel(actById(ev.chosen))}` : '') : 'Proposed, not decided yet',
       approx(ev) ? '~ Times are approximate' : null,
-      m.length ? `❤ Both want: ${names(m)}` : null,
+      m.length ? `☌ Both want: ${names(m)}` : null,
       ...WHO.map(p => `${PEOPLE[p].name}: ${names(v[p])}`),
       ev.note ? '\n' + ev.note : null,
       `\nPlan it in Syzygy: ${appUrl()}`,
