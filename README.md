@@ -4,7 +4,7 @@ A shared calendar for two people to find time together and decide what to do.
 It's a static site with no backend: the data lives in Firebase Firestore, and there is no login.
 
 ## Features
-- Week / 3-day / day calendar. Drag to add, or tap an empty spot.
+- Week / 3-day / day calendar. Drag on an empty spot to add (or tap it). Drag a plan or a free/flexible block to move it to another time or day, or drag its bottom edge to change when it ends (phone: hold, then drag).
 - **Free** and **Flexible** time for each person: Arturo is purple and Zosia is green, solid for free and light/striped for flexible. Time slots (morning, afternoon, evening, all day, or exact times), and events that repeat every week or every 2 weeks with an optional end date and per-date skip.
 - **Matches**: the times when you're both free (solid pink) or both available with at least one of you only flexible (dashed pink). They're listed in the sidebar as "Next times you're both free".
 - **Plans**: an empty event where you pick the activities you'd like to do (at least one, up to all of them). Each person votes separately, and the activities you both picked are marked ❤. You set a final choice (or press 🎲 Pick for us) and mark the plan Proposed or Confirmed.

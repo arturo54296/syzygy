@@ -1,6 +1,6 @@
-import { openStore, makeKey } from './store.js?v=8';
-import { SEED, SEED_VERSION } from './activities.js?v=8';
-import * as G from './gcal.js?v=8';
+import { openStore, makeKey } from './store.js?v=9';
+import { SEED, SEED_VERSION } from './activities.js?v=9';
+import * as G from './gcal.js?v=9';
 
 const MIN = 60e3, HOUR = 36e5, DAY = 864e5, SNAP = 15 * MIN;
 const PEOPLE = { arturo: { name: 'Arturo', css: '--arturo' }, zosia: { name: 'Zosia', css: '--zosia' } };
@@ -154,8 +154,11 @@ function doneMap() {
 }
 
 // ---------- render ----------
+let renderPending = false;
 function render() {
   if (!store) return;
+  if (mv?.active || ideaDrag?.active) { renderPending = true; return; }   // don't redraw under a drag
+  renderPending = false;
   const [s, e] = range();
   $('#label').textContent = view.mode === 'day' ? `${wd(s)} ${dmy(s)}` : `${dm(s)} – ${dmy(+e - 1)}`;
   document.querySelectorAll('#mode button').forEach(b => b.classList.toggle('on', b.dataset.v === view.mode));
@@ -250,6 +253,7 @@ function renderCalendar(days) {
         if ((x.e - x.s) * pxPerMs >= 26) node.append(el('span', {}, PEOPLE[who].name), el('span', {}, LEVEL[o.ev.level] + (o.rep ? ' ↻' : '')));
         else if ((x.e - x.s) * pxPerMs >= 13) node.append(el('span', {}, `${PEOPLE[who].name[0]} · ${LEVEL[o.ev.level]}`));
         node._click = () => availDialog(o);
+        node._occ = o;
         col.append(node);
       }
     });
@@ -277,6 +281,9 @@ function attachDrag(col, ds, pxPerMs) {
   const reset = () => { start = null; sel?.remove(); sel = null; };
   col.addEventListener('pointerdown', e => {
     if (e.button !== 0) return;
+    let b = e.target;   // pressing on a plan or a free/flexible block: move it (or open it on a plain click)
+    while (b && b !== col && !b._occ) b = b.parentElement;
+    if (b?._occ) return startMove(b, col, e);
     start = { y: e.clientY - col.getBoundingClientRect().top, target: e.target, touch: e.pointerType !== 'mouse' }; moved = false;
     if (!start.touch) try { col.setPointerCapture(e.pointerId); } catch {}   // touch: let the page scroll; tap still works
   });
@@ -309,6 +316,78 @@ function attachDrag(col, ds, pxPerMs) {
     newDialog(t, Math.min(t + 2 * HOUR, ds + DAY));
   });
 }
+
+// ---------- move / resize blocks ----------
+// Mouse: drag a plan or a free/flexible block to another time or day; drag its bottom edge to change the end.
+// Touch: hold ~0.4 s, then drag. A plain click/tap still opens it. Repeating events move the whole series.
+let mv = null;
+function startMove(node, col, e) {
+  const r = node.getBoundingClientRect(), touch = e.pointerType !== 'mouse';
+  mv = { o: node._occ, node, col, x: e.clientX, y: e.clientY, id: e.pointerId, touch, resize: !touch && e.clientY > r.bottom - 7,
+    active: false, timer: null, prev: null, s: node._occ.s, e: node._occ.e };
+  if (!touch) e.preventDefault();
+  else { const m = mv; mv.timer = setTimeout(() => { if (mv === m) { beginMove(m); navigator.vibrate?.(20); } }, 400); }
+}
+function beginMove(m) {
+  m.active = true;
+  window.getSelection()?.removeAllRanges();
+  document.body.classList.add('dragging');
+  m.node.classList.add('moving');
+}
+function moveTo(m, x, y) {
+  const n = document.elementFromPoint(x, y)?.closest('.col');
+  const tcol = n && n._ds !== undefined ? n : m.col;
+  const ppm = m.col._ppm, dt = Math.round((y - m.y) / ppm / SNAP) * SNAP;
+  const o = m.o, dur = o.e - o.s;
+  if (m.resize) { m.s = o.s; m.e = Math.max(o.s + SNAP, Math.round((o.e + dt) / SNAP) * SNAP); }
+  else {
+    const days = Math.round((tcol._ds - m.col._ds) / DAY);
+    const st = new Date(o.s); st.setDate(st.getDate() + days);
+    m.s = Math.round((+st + dt) / SNAP) * SNAP; m.e = m.s + dur;
+  }
+  // preview in the column where the new start is
+  const pcol = m.resize ? m.col : tcol, ds = pcol._ds, a = Math.max(m.s, ds), b = Math.min(m.e, ds + DAY);
+  m.prev?.remove();
+  m.prev = el('div', { class: 'sel', style: { top: `${(a - ds) * ppm}px`, height: `${Math.max(b - a, SNAP) * ppm}px` } },
+    `${m.resize ? '' : dayName(m.s) + ' '}${hhmm(m.s)}–${hhmmEnd(m.e)}`);
+  pcol.append(m.prev);
+  const sc = $('#calScroll').getBoundingClientRect();
+  if (y < sc.top + 40) $('#calScroll').scrollTop -= 12; else if (y > sc.bottom - 40) $('#calScroll').scrollTop += 12;
+}
+function endMove(commit) {
+  const m = mv;
+  mv = null;
+  if (!m) return;
+  clearTimeout(m.timer);
+  if (!m.active) { if (commit && m.node._click) m.node._click(); return; }
+  m.prev?.remove(); m.node.classList.remove('moving');
+  document.body.classList.remove('dragging');
+  const changed = commit && (m.s !== m.o.s || m.e !== m.o.e);
+  if (changed) {
+    const cur = data.events.find(x => x.id === m.o.ev.id);
+    if (cur) {
+      store.put('events', { ...cur, ...shifted(cur, m.o, [m.s, m.e]) });
+      toast(`${m.resize ? 'Now ends' : 'Moved to'} ${m.resize ? hhmmEnd(m.e) : `${dayName(m.s)} ${hhmm(m.s)}–${hhmmEnd(m.e)}`}${m.o.rep ? ' (whole series)' : ''}`);
+    }
+  }
+  if (renderPending || !changed) render();
+}
+document.addEventListener('pointermove', e => {
+  const m = mv;
+  if (!m || e.pointerId !== m.id) return;
+  if (!m.active) {
+    const dist = Math.hypot(e.clientX - m.x, e.clientY - m.y);
+    if (m.touch) { if (dist > 10) { clearTimeout(m.timer); mv = null; } return; }   // a swipe = scrolling
+    if (dist < 5) return;
+    beginMove(m);
+  }
+  e.preventDefault();
+  moveTo(m, e.clientX, e.clientY);
+}, { passive: false });
+document.addEventListener('touchmove', e => { if (mv?.active) e.preventDefault(); }, { passive: false });
+document.addEventListener('pointerup', e => { if (mv && e.pointerId === mv.id) endMove(true); });
+document.addEventListener('pointercancel', e => { if (mv && e.pointerId === mv.id) endMove(false); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && mv) endMove(false); });
 
 // ---------- sidebar ----------
 function renderAside() {
@@ -417,6 +496,7 @@ function endIdeaDrag(drop) {
   st.ghost.remove(); st.prev?.remove();
   document.querySelectorAll('.plan.droptarget').forEach(n => n.classList.remove('droptarget'));
   document.body.classList.remove('dragging');
+  if (renderPending) render();
   dragJustEnded = true; setTimeout(() => { dragJustEnded = false; }, 50);
   const d = drop ? st.drop : null;
   if (!d) return;

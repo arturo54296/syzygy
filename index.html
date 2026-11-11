@@ -105,6 +105,9 @@ body.dragging, body.dragging * { cursor: grabbing !important; user-select: none 
 .plan.prop { background: var(--panel); border: 2px dashed var(--love); color: var(--ink); }
 .plan.conf { background: var(--love); color: #fff; border: 2px solid var(--love); }
 .plan:hover { outline: 2px solid var(--ink); z-index: 5; }
+.plan, .av { cursor: grab; touch-action: pan-y; }
+.plan::after, .av::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 6px; cursor: ns-resize; }
+.moving { opacity: .35; }
 .plan b { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .plan .em { letter-spacing: 1px; white-space: nowrap; overflow: hidden; }
 .plan .wait { opacity: .75; font-size: 10px; }
@@ -197,6 +200,6 @@ table.st td.num { text-align: right; font-variant-numeric: tabular-nums; white-s
 </main>
 <dialog id="dlg"></dialog>
 <div id="toast"></div>
-<script type="module" src="app.js?v=8"></script>
+<script type="module" src="app.js?v=9"></script>
 </body>
 </html>

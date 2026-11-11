@@ -1,6 +1,6 @@
 // Google Calendar from the browser, no server: Google Identity Services gives a 1-hour access token,
 // then we call the Calendar REST API directly. Needs googleClientId in config.js (see README).
-import { googleClientId } from './config.js?v=8';
+import { googleClientId } from './config.js?v=9';
 
 const SCOPES = 'https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.readonly';
 const API = 'https://www.googleapis.com/calendar/v3';
