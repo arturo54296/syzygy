@@ -12,4 +12,4 @@ export const firebaseConfig = {
 
 // Google sign-in client ID for the Google Calendar sync (Google Cloud console → APIs & Services → Credentials →
 // OAuth client ID, type "Web application"). Public value. null = Google Calendar features hidden.
-export const googleClientId = null;
+export const googleClientId = "951181855141-fuvijap12q6io6m05opofenk70jivf4o.apps.googleusercontent.com";
