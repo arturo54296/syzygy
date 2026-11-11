@@ -35,3 +35,16 @@ The config values are public by design. What protects the data is the long rando
 3. Open the `….onrender.com` URL and click **Create our shared calendar**. Copy the link it shows (it ends in `#k=…`) and send it to the other person. Both of you bookmark it.
 
 Every push to the repo redeploys the site. Your data is unaffected, because it lives in Firebase.
+
+## Google Calendar sync (optional)
+Every plan, proposed or confirmed, is copied to **one shared Google calendar**, so it shows up in both of your Google Calendars. Proposed plans get "(proposed)" in the title and don't block your time. Each person can also see their own Google busy times in the app, as grey blocks only they can see. There's no server: the browser signs in to Google and syncs while the app is open on a connected device. Edit plans in the app, not in Google Calendar.
+
+Setup (once, about 10 min). You can reuse the Firebase project, which is also a Google Cloud project:
+1. In https://console.cloud.google.com, select the project. Go to **APIs & Services → Library**, search for **Google Calendar API** and click **Enable**.
+2. Go to **APIs & Services → OAuth consent screen** (or **Google Auth Platform**) and choose **External**. Fill in an app name and the email fields. Under **Audience → Test users**, add both of your Google emails. Leave it in **Testing**.
+3. Go to **APIs & Services → Credentials → Create credentials → OAuth client ID** and choose type **Web application**. Under **Authorized JavaScript origins**, add the site URL (e.g. `https://syzygy-9i5i.onrender.com`) and `http://localhost:5810`. You don't need redirect URIs.
+4. Copy the **Client ID** (`…apps.googleusercontent.com`) into `googleClientId` in `config.js`, then push.
+5. In Google Calendar, create a calendar (e.g. "Us") and share it with the other person, giving them **Make changes to events**.
+6. In the app, click 📅, then **Connect Google Calendar**. Google shows an "unverified app" warning: click **Continue**. Then click **Choose calendar** and pick "Us". The other person only needs to click **Connect** on their device; the calendar choice is shared.
+
+Google's sign-in lasts about an hour. When it has run out, the 📅 button says **Reconnect**. Saving a plan reconnects automatically, which may show a quick popup.

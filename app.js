@@ -1,5 +1,6 @@
-import { openStore, makeKey } from './store.js?v=7';
-import { SEED, SEED_VERSION } from './activities.js?v=7';
+import { openStore, makeKey } from './store.js?v=8';
+import { SEED, SEED_VERSION } from './activities.js?v=8';
+import * as G from './gcal.js?v=8';
 
 const MIN = 60e3, HOUR = 36e5, DAY = 864e5, SNAP = 15 * MIN;
 const PEOPLE = { arturo: { name: 'Arturo', css: '--arturo' }, zosia: { name: 'Zosia', css: '--zosia' } };
@@ -52,7 +53,7 @@ let toastT;
 function toast(msg) { const t = $('#toast'); t.textContent = msg; t.classList.add('on'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('on'), 3500); }
 
 // ---------- state ----------
-let store = null, data = { events: [], activities: [] }, me = LS.get('me', null);
+let store = null, data = { events: [], activities: [], meta: [] }, me = LS.get('me', null);
 const view = { mode: LS.get('mode', innerWidth < 760 ? '3day' : 'week'), anchor: startOfDay(new Date()), zoom: Object.assign({ week: 2, '3day': 2, day: 3 }, LS.get('zoom', {})) };
 const filt = Object.assign({ place: 'any', cost: 3, hours: 0, rain: false, noBook: false, q: '', archived: false }, LS.get('filt', {}), { q: '' });
 const hourPx = () => ZOOM[view.zoom[view.mode]];
@@ -162,6 +163,8 @@ function render() {
   mb.replaceChildren(...(me ? [el('span', { class: 'dot', style: { background: colorOf(me) } }), PEOPLE[me].name] : ['Who are you?']));
   renderCalendar(dayList());
   renderAside();
+  renderGBtn();
+  loadBusy();
 }
 
 function availStyle(who, level) {
@@ -233,6 +236,10 @@ function renderCalendar(days) {
     col._ds = ds; col._ppm = pxPerMs;
     const top = t => `${(Math.max(t, ds) - ds) * pxPerMs}px`;
     const ht = (s, e) => `${Math.max((Math.min(e, de) - Math.max(s, ds)) * pxPerMs, 3)}px`;
+    // my Google busy times (only on this device, only for me), under everything else
+    if (me && busy.key === rangeKey()) for (const b of busy.list.filter(b => b.e > ds && b.s < de))
+      col.append(el('div', { class: 'busy', style: { top: top(b.s), height: ht(b.s, b.e), left: `${WHO.indexOf(me) * 50}%` },
+        title: `Busy in your Google Calendar ${hhmm(b.s)}–${hhmmEnd(b.e)} (only you see this)` }, (Math.min(b.e, de) - Math.max(b.s, ds)) * pxPerMs >= 14 ? el('span', {}, 'busy') : null));
     // availability: left half Arturo, right half Zosia
     WHO.forEach((who, i) => {
       const items = layoutLanes(occ.filter(o => o.ev.kind === 'avail' && o.ev.who === who).map(o => ({ o, s: Math.max(o.s, ds), e: Math.min(o.e, de) })));
@@ -805,6 +812,153 @@ function shareDialog(fresh = false) {
   ], fresh && !me ? () => setTimeout(whoDialog) : null);
 }
 
+// ---------- Google Calendar ----------
+// Every plan (proposed and confirmed) is copied to ONE shared Google calendar chosen in 📅 (stored in Firestore,
+// so both use the same one). Any connected device that has the app open does the syncing; the sync state is shared
+// too (meta/gsync: plan id → hash of what was sent), so unchanged plans aren't sent again.
+const metaDoc = id => data.meta?.find(d => d.id === id) || null;
+const gSettings = () => metaDoc('settings') || {};
+let gStatus = '', gBusyNow = false, gAgain = false, gTimer = null;
+const TZ = Intl.DateTimeFormat().resolvedOptions().timeZone;
+const localISO = t => { const d = new Date(t); return `${ymd(d)}T${hhmm(d)}:00`; };
+const gid = id => 'tg' + [...id].map(c => c.charCodeAt(0).toString(16).padStart(2, '0')).join('');  // Google ids: a–v, 0–9
+const hash = s => { let h = 5381; for (let i = 0; i < s.length; i++) h = ((h * 33) ^ s.charCodeAt(i)) >>> 0; return h.toString(36); };
+const appUrl = () => location.origin + location.pathname;
+
+function gBody(ev) {
+  const v = votesOf(ev), m = matchedIds(ev), conf = ev.status === 'confirmed';
+  const names = ids => ids.map(id => actLabel(actById(id))).join(', ') || '(no votes yet)';
+  const body = {
+    summary: `💞 ${planHeadline(ev)}${conf ? '' : ' (proposed)'}`,
+    description: [
+      conf ? '✓ Confirmed' + (ev.chosen ? `: ${actLabel(actById(ev.chosen))}` : '') : 'Proposed, not decided yet',
+      m.length ? `❤ Both want: ${names(m)}` : null,
+      ...WHO.map(p => `${PEOPLE[p].name}: ${names(v[p])}`),
+      ev.note ? '\n' + ev.note : null,
+      `\nPlan it in Together: ${appUrl()}`,
+    ].filter(x => x !== null).join('\n'),
+    start: { dateTime: localISO(ev.s), timeZone: TZ },
+    end: { dateTime: localISO(ev.e), timeZone: TZ },
+    transparency: conf ? 'opaque' : 'transparent',   // proposed plans don't block your time
+    status: 'confirmed',                              // also brings back an event that was deleted in Google
+  };
+  if (ev.repeat) {
+    const st = new Date(ev.s);
+    let rule = `RRULE:FREQ=WEEKLY;INTERVAL=${ev.repeat.every || 1}`;
+    if (ev.repeat.until) rule += `;UNTIL=${ev.repeat.until.replaceAll('-', '')}T235959Z`;
+    body.recurrence = [rule, ...(ev.repeat.skip || []).map(k => `EXDATE;TZID=${TZ}:${k.replaceAll('-', '')}T${pad(st.getHours())}${pad(st.getMinutes())}00`)];
+  }
+  return body;
+}
+
+function gSchedule() {
+  clearTimeout(gTimer);
+  if (G.hasClient && gSettings().gcalId && G.isValid()) gTimer = setTimeout(gSync, 1500);
+}
+function gPoke() {
+  if (G.hasClient && G.ready() && G.wanted() && gSettings().gcalId && !G.isValid()) G.requestToken('');
+}
+async function gSync() {
+  const cal = gSettings().gcalId;
+  if (!G.hasClient || !cal || !G.isValid()) return;
+  if (gBusyNow) { gAgain = true; return; }
+  gBusyNow = true; renderGBtn();
+  const C = `/calendars/${encodeURIComponent(cal)}/events`;
+  try {
+    const st = metaDoc('gsync'), prev = st?.cal === cal ? (st.ids || {}) : {}, next = {};
+    let n = 0;
+    for (const ev of data.events.filter(e => e.kind === 'plan')) {
+      const body = gBody(ev), h = hash(JSON.stringify(body));
+      next[ev.id] = h;
+      if (prev[ev.id] === h) continue;
+      try { await G.api('PUT', `${C}/${gid(ev.id)}`, body); }
+      catch (e) { if (e.status === 404) await G.api('POST', C, { ...body, id: gid(ev.id) }); else throw e; }
+      n++;
+    }
+    for (const id of Object.keys(prev)) if (!next[id]) {
+      try { await G.api('DELETE', `${C}/${gid(id)}`); } catch (e) { if (![404, 410].includes(e.status)) throw e; }
+      n++;
+    }
+    if (n || st?.cal !== cal) await store.put('meta', { id: 'gsync', cal, ids: next, at: Date.now() });
+    gStatus = n ? `Synced ${n} change${n > 1 ? 's' : ''} to Google` : 'Google Calendar up to date';
+  } catch (e) {
+    console.error(e);
+    gStatus = e.code === 'auth' ? 'Google sign-in expired: click 📅 to reconnect' : 'Google sync error: ' + e.message;
+    if (e.code !== 'auth') toast(gStatus);
+  } finally {
+    gBusyNow = false; renderGBtn();
+    if (gAgain) { gAgain = false; gSync(); }
+  }
+}
+
+// my busy times from my own (primary) Google Calendar, shown only to me
+let busy = { key: '', at: 0, list: [] }, busyLoading = false;
+const rangeKey = () => { const [s, e] = range(); return `${+s}-${+e}`; };
+const showBusy = () => LS.get('gbusy', true);
+async function loadBusy() {
+  if (!G.hasClient || !showBusy() || !G.isValid() || busyLoading) return;
+  const key = rangeKey();
+  if (busy.key === key && Date.now() - busy.at < 5 * 60e3) return;
+  busyLoading = true;
+  try {
+    const [s, e] = range();
+    const r = await G.api('POST', '/freeBusy', { timeMin: new Date(s).toISOString(), timeMax: new Date(e).toISOString(), items: [{ id: 'primary' }] });
+    busy = { key, at: Date.now(), list: (r.calendars?.primary?.busy || []).map(b => ({ s: +new Date(b.start), e: +new Date(b.end) })) };
+    renderCalendar(dayList());
+  } catch (e) { console.error(e); busy = { key, at: Date.now(), list: [] }; }
+  finally { busyLoading = false; }
+}
+
+function renderGBtn() {
+  const b = $('#gcalBtn');
+  if (!b) return;
+  const cal = gSettings().gcalId, ok = G.isValid();
+  const needs = G.hasClient && G.wanted() && !ok;
+  b.textContent = gBusyNow ? '📅 …' : needs ? '📅 Reconnect' : '📅';
+  b.classList.toggle('warn', needs);
+  b.title = !G.hasClient ? 'Google Calendar (not set up)' : needs ? 'Google sign-in expired: click to reconnect' :
+    ok ? `Google Calendar${cal ? ': ' + (gSettings().gcalName || cal) : ' (choose a calendar)'}${gStatus ? '\n' + gStatus : ''}` : 'Connect Google Calendar';
+}
+
+function gcalDialog() {
+  if (!G.hasClient) return dialog('📅 Google Calendar', [
+    el('p', {}, 'Google Calendar sync isn’t set up yet: it needs a Google sign-in client ID in config.js.'),
+    el('p', { class: 'hint' }, 'See “Google Calendar sync” in README.md.'),
+  ]);
+  const s = gSettings(), ok = G.isValid();
+  const pickBox = el('div', {});
+  const busyCb = el('input', { type: 'checkbox', checked: showBusy(), onchange: e => { LS.set('gbusy', e.target.checked); busy.key = ''; render(); } });
+  const choose = async () => {
+    pickBox.replaceChildren(el('p', { class: 'hint' }, 'Loading your calendars…'));
+    try {
+      const r = await G.api('GET', '/users/me/calendarList', null, { minAccessRole: 'writer' });
+      const items = (r.items || []).sort((a, b) => (a.primary ? 1 : 0) - (b.primary ? 1 : 0) || a.summary.localeCompare(b.summary));
+      const sel = el('select', {}, items.map(c => el('option', { value: c.id, selected: c.id === s.gcalId }, c.summaryOverride || c.summary + (c.primary ? ' (your main calendar)' : ''))));
+      pickBox.replaceChildren(el('div', { class: 'row' }, sel, el('button', { class: 'primary', onclick: async () => {
+        const c = items.find(x => x.id === sel.value);
+        await store.put('meta', { ...gSettings(), id: 'settings', gcalId: c.id, gcalName: c.summaryOverride || c.summary });
+        toast(`Plans will go to “${c.summaryOverride || c.summary}”`); close(); gSchedule();
+      } }, 'Use this calendar')),
+        el('p', { class: 'hint' }, 'Pick the calendar you both share (e.g. “Us”). Don’t see it? Create it in Google Calendar and share it with the other person (“Make changes to events”), then reload.'));
+    } catch (e) { pickBox.replaceChildren(el('p', {}, 'Could not load your calendars: ' + e.message)); }
+  };
+  dialog('📅 Google Calendar', [
+    el('p', {}, ok ? '✓ Connected on this device.' : G.wanted() ? 'Sign-in expired on this device.' : 'Not connected on this device.'),
+    el('div', { class: 'row' },
+      ok ? null : el('button', { class: 'primary', onclick: () => { close(); G.requestToken(G.wanted() ? '' : 'consent'); } }, G.wanted() ? 'Reconnect' : 'Connect Google Calendar'),
+      ok ? el('button', { onclick: () => { gSync(); close(); toast('Syncing…'); } }, 'Sync now') : null,
+      G.wanted() ? el('button', { class: 'danger', onclick: () => { G.disconnect(); busy = { key: '', at: 0, list: [] }; close(); render(); } }, 'Disconnect this device') : null),
+    el('section', {}, el('h3', {}, 'Shared calendar'),
+      el('p', {}, s.gcalId ? `All plans (proposed and confirmed) go to “${s.gcalName || s.gcalId}”.` : 'No calendar chosen yet.'),
+      ok ? el('button', { onclick: choose }, s.gcalId ? 'Change calendar' : 'Choose calendar') : el('p', { class: 'hint' }, 'Connect first to choose one.'),
+      pickBox),
+    el('section', {}, el('h3', {}, 'On this device'),
+      el('label', {}, busyCb, ' Show my Google busy times (grey, only you see them)')),
+    gStatus ? el('p', { class: 'hint' }, gStatus) : null,
+    el('p', { class: 'hint' }, 'Syncing happens while the app is open on a connected device. Edit plans here, not in Google Calendar: changes made in Google are overwritten.'),
+  ]);
+}
+
 // ---------- navigation ----------
 function zoom(dir) {
   const sc = $('#calScroll'), centerT = (sc.scrollTop + sc.clientHeight / 2) / hourPx();
@@ -826,6 +980,7 @@ $('#zoomOut').onclick = () => zoom(-1);
 $('#addBtn').onclick = () => { const t = Math.ceil(Date.now() / HOUR) * HOUR; newDialog(t, t + 2 * HOUR); };
 $('#meBtn').onclick = () => whoDialog();
 $('#shareBtn').onclick = () => shareDialog();
+$('#gcalBtn').onclick = () => (G.hasClient && G.wanted() && !G.isValid() && G.ready()) ? G.requestToken('') : gcalDialog();
 $('#asideBtn').onclick = e => { e.stopPropagation(); $('#aside').classList.toggle('open'); };
 document.addEventListener('click', e => { const a = $('#aside'); if (a.classList.contains('open') && !a.contains(e.target) && !$('#dlg').contains(e.target)) a.classList.remove('open'); });
 document.addEventListener('keydown', e => {
@@ -856,9 +1011,18 @@ async function boot(fresh = false) {
   if (!fromHash) history.replaceState(null, '', '#k=' + key);
   LS.set('key', key);
   try {
-    store = await openStore(key, d => { data = d; render(); }, err => { console.error(err); setStatus('down', 'Connection problem'); toast('Could not reach the database: ' + (err.code || err.message)); });
+    store = await openStore(key, d => { data = d; render(); gSchedule(); }, err => { console.error(err); setStatus('down', 'Connection problem'); toast('Could not reach the database: ' + (err.code || err.message)); });
   } catch (err) { console.error(err); setStatus('down', 'Offline'); toast('Could not load Firebase'); return; }
   setStatus(store.mode === 'demo' ? 'demo' : '', store.mode === 'demo' ? 'Demo (this browser only)' : 'Live');
+  // any change to a plan from a click: if Google sign-in expired, renew it now (a popup needs a click)
+  const rawPut = store.put, rawDel = store.del;
+  store.put = (c, o) => { if (c === 'events') gPoke(); return rawPut(c, o); };
+  store.del = (c, id) => { if (c === 'events') gPoke(); return rawDel(c, id); };
+  G.onToken((tok, err) => {
+    if (err) { gStatus = err === 'popup_closed' ? 'Sign-in window closed' : 'Google sign-in failed: ' + err; renderGBtn(); return; }
+    busy.key = ''; gStatus = 'Connected'; render(); gSync();
+  });
+  G.loadGis().catch(() => { gStatus = 'Could not load Google sign-in'; });
   store.start();
   await store.seed(SEED, SEED_VERSION);
   render();

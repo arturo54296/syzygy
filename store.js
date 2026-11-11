@@ -1,9 +1,9 @@
 // Data layer. Firestore when config.js has a config, otherwise a demo store in localStorage
 // (synced live between tabs of the same browser, handy for testing both people side by side).
-import { firebaseConfig } from './config.js?v=7';
+import { firebaseConfig } from './config.js?v=8';
 
 const FIREBASE_VERSION = '10.12.2';
-const COLLS = ['events', 'activities'];
+const COLLS = ['events', 'activities', 'meta'];   // meta: shared settings (e.g. the Google calendar) and sync state
 
 /** Random space key for the shared link (18 chars from a 32-letter alphabet ≈ 90 bits). */
 export function makeKey() {
@@ -15,13 +15,14 @@ export function makeKey() {
 const clean = o => JSON.parse(JSON.stringify(o));  // drops undefined (Firestore rejects it)
 
 export async function openStore(key, onData, onError) {
-  const data = { events: [], activities: [] }, ready = { events: false, activities: false };
-  const emit = () => { if (ready.events && ready.activities) onData({ events: [...data.events], activities: [...data.activities] }); };
+  const data = {}, ready = {};
+  for (const c of COLLS) { data[c] = []; ready[c] = false; }
+  const emit = () => { if (COLLS.every(c => ready[c])) onData(Object.fromEntries(COLLS.map(c => [c, [...data[c]]]))); };
 
   if (!firebaseConfig) {
     const LK = 'tp.demo.' + key;
     const load = () => { try { return JSON.parse(localStorage.getItem(LK)) || {}; } catch { return {}; } };
-    const read = () => { const db = load(); for (const c of COLLS) { data[c] = Object.values(db[c] || {}); ready[c] = true; } emit(); };
+    const read = () => { const db = load(); for (const c of COLLS) { data[c] = Object.values(db[c] || {}).filter(x => x && typeof x === 'object' && x.id); ready[c] = true; } emit(); };
     const bc = 'BroadcastChannel' in window ? new BroadcastChannel(LK) : null;
     if (bc) bc.onmessage = read;
     const write = fn => { const db = load(); fn(db); localStorage.setItem(LK, JSON.stringify(db)); bc?.postMessage(1); read(); };
@@ -31,12 +32,12 @@ export async function openStore(key, onData, onError) {
       put: async (c, o) => write(db => { (db[c] ||= {})[o.id] = clean(o); }),
       del: async (c, id) => write(db => { if (db[c]) delete db[c][id]; }),
       seed: async (list, version) => {
-        const meta = load().meta, have = meta?.seeded ? (meta.version || 1) : 0;
+        const db0 = load(), have = db0._seed?.version || (db0.meta?.seeded ? (db0.meta.version || 1) : 0);
         if (have >= version) return;
         write(db => {
           db.activities ||= {};
           for (const a of list) if (a.since > have) db.activities[a.id] ||= clean(a);
-          db.meta = { ...(db.meta || {}), seeded: true, version };
+          db._seed = { version };
         });
       },
     };

@@ -9,3 +9,7 @@ export const firebaseConfig = {
   messagingSenderId: "951181855141",
   appId: "1:951181855141:web:99d03a85e04b19999ac04c",
 };
+
+// Google sign-in client ID for the Google Calendar sync (Google Cloud console → APIs & Services → Credentials →
+// OAuth client ID, type "Web application"). Public value. null = Google Calendar features hidden.
+export const googleClientId = null;
