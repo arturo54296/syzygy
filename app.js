@@ -1,5 +1,5 @@
-import { openStore, makeKey } from './store.js?v=3';
-import { SEED, SEED_VERSION } from './activities.js?v=3';
+import { openStore, makeKey } from './store.js?v=4';
+import { SEED, SEED_VERSION } from './activities.js?v=4';
 
 const MIN = 60e3, HOUR = 36e5, DAY = 864e5, SNAP = 15 * MIN;
 const PEOPLE = { arturo: { name: 'Arturo', css: '--arturo' }, zosia: { name: 'Zosia', css: '--zosia' } };
@@ -186,8 +186,12 @@ function layoutLanes(items) {
 }
 
 function planHeadline(ev) {
-  if (ev.status === 'confirmed' && ev.chosen) return actLabel(actById(ev.chosen));
-  return ev.title || 'Plan';
+  // own title if given; otherwise the idea's name: the final choice, else the matches, else all votes ("🎲 Board games +2")
+  if (ev.title) return ev.title;
+  const ids = ev.chosen ? [ev.chosen] : matchedIds(ev).length ? matchedIds(ev) : votedIds(ev);
+  const known = ids.filter(id => actById(id));
+  if (!known.length) return 'Plan';
+  return actLabel(actById(known[0])) + (known.length > 1 ? ` +${known.length - 1}` : '');
 }
 function planCard(o, h) {
   const ev = o.ev, v = votesOf(ev), m = matchedIds(ev), rest = votedIds(ev).filter(id => !m.includes(id));
