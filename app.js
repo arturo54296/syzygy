@@ -1,6 +1,6 @@
-import { openStore, makeKey } from './store.js?v=23';
-import { SEED, SEED_VERSION } from './activities.js?v=23';
-import * as G from './gcal.js?v=23';
+import { openStore, makeKey } from './store.js?v=24';
+import { SEED, SEED_VERSION } from './activities.js?v=24';
+import * as G from './gcal.js?v=24';
 
 const MIN = 60e3, HOUR = 36e5, DAY = 864e5, SNAP = 15 * MIN;
 const PEOPLE = { arturo: { name: 'Arturo', css: '--arturo' }, zosia: { name: 'Zosia', css: '--zosia' } };
@@ -982,7 +982,8 @@ function gSchedule() {
   if (G.hasClient && gSettings().gcalId && G.isValid()) gTimer = setTimeout(gSync, 1500);
 }
 function gPoke() {
-  if (G.hasClient && G.ready() && G.wanted() && gSettings().gcalId && !G.isValid()) G.requestToken('');
+  // also renew when <10 min are left, so the sync that follows this click doesn't run into an expired pass
+  if (G.hasClient && G.ready() && G.wanted() && gSettings().gcalId && (!G.isValid() || G.expiresWithin(10 * MIN))) G.requestToken('');
 }
 // safety: never sync into someone's main (primary) calendar; checked once per calendar per session
 const safeTargets = {};
@@ -1179,7 +1180,12 @@ async function boot(fresh = false) {
   store.put = (c, o) => { if (c === 'events') gPoke(); return rawPut(c, o); };
   store.del = (c, id) => { if (c === 'events') gPoke(); return rawDel(c, id); };
   G.onToken((tok, err) => {
-    if (err) { gStatus = err === 'popup_closed' ? 'Sign-in window closed' : 'Google sign-in failed: ' + err; renderGBtn(); return; }
+    if (err) {
+      gStatus = err === 'popup_closed' ? 'Sign-in window closed'
+        : err === 'popup_failed_to_open' ? 'Your browser blocked Google’s sign-in window: allow pop-ups for this site, then click 📅 Reconnect'
+        : 'Google sign-in failed: ' + err;
+      renderGBtn(); toast(gStatus); return;
+    }
     busy.key = ''; gStatus = 'Connected'; render(); gSync();
   });
   G.loadGis().catch(() => { gStatus = 'Could not load Google sign-in'; });
