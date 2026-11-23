@@ -41,14 +41,25 @@ The config values are public by design. What protects the data is the long rando
 Every push to the repo redeploys the site. Your data is unaffected, because it lives in Firebase.
 
 ## Google Calendar sync (optional)
-Every plan, proposed or confirmed, is copied to **one shared Google calendar**, so it shows up in both of your Google Calendars. Proposed plans get "(proposed)" in the title and don't block your time. Each person can also see their own Google busy times in the app, as grey blocks only they can see. There's no server: the browser signs in to Google and syncs while the app is open on a connected device. Edit plans in the app, not in Google Calendar.
+Every plan, proposed or confirmed, is copied to **one shared Google calendar called "Syzygy"**, so it shows up in both of your Google Calendars. Proposed plans get "(proposed)" in the title and don't block your time. Each person can also see their own Google busy times in the app, as grey blocks only they can see. There's no server: the browser signs in to Google and syncs while the app is open on a connected device. Edit plans in the app, not in Google Calendar.
 
-Setup (once, about 10 min). You can reuse the Firebase project, which is also a Google Cloud project:
+### What Syzygy can access in your Google account
+As little as possible, so that even a hacked copy of the code couldn't do much:
+- `calendar.app.created`: create its own "Syzygy" calendar and edit events **only in calendars Syzygy created**. Your main calendar and every calendar you made yourself are refused by Google.
+- `calendar.freebusy`: your busy times (e.g. "busy 10:00–11:00"), never titles, people or places.
+- `openid email`: your email address, so Google can skip "choose an account" when the sign-in is renewed.
+
+Worst case if someone changed the code: they could see when you're busy and mess up the Syzygy calendar. No Gmail, no Drive, no other calendars. Tested with two accounts on 23/11/2026: the second account could write to the Syzygy calendar the first one created and shared, and reading the main calendar was refused.
+
+Earlier versions asked for full access to all calendars. When a device opens this version, Syzygy removes that old access once (per Google account) and asks you to approve the small set above. **Rule of thumb:** after that, Syzygy should never show an approval screen again. If Google ever asks you to approve something new (e.g. email or Drive), close it and don't approve.
+
+### Setup (once, about 10 min)
+You can reuse the Firebase project, which is also a Google Cloud project:
 1. In https://console.cloud.google.com, select the project. Go to **APIs & Services → Library**, search for **Google Calendar API** and click **Enable**.
-2. Go to **APIs & Services → OAuth consent screen** (or **Google Auth Platform**) and choose **External**. Fill in an app name and the email fields. Under **Audience → Test users**, add both of your Google emails. Leave it in **Testing**.
-3. Go to **APIs & Services → Credentials → Create credentials → OAuth client ID** and choose type **Web application**. Under **Authorized JavaScript origins**, add the site URL (e.g. `https://syzygy-9i5i.onrender.com`) and `http://localhost:5810`. You don't need redirect URIs.
+2. Go to **Google Auth Platform** (or **APIs & Services → OAuth consent screen**) and choose **External**. Fill in an app name and the email fields. Under **Audience → Test users**, add both of your Google emails. Under **Data access**, add the three scopes above.
+3. Go to **Credentials → Create credentials → OAuth client ID** and choose type **Web application**. Under **Authorized JavaScript origins**, add the site URL (e.g. `https://syzygy-9i5i.onrender.com`) and `http://localhost:5810`. You don't need redirect URIs.
 4. Copy the **Client ID** (`…apps.googleusercontent.com`) into `googleClientId` in `config.js`, then push.
-5. In Google Calendar, create a calendar (e.g. "Us") and share it with the other person, giving them **Make changes to events**.
-6. In the app, click 📅, then **Connect Google Calendar**. Google shows an "unverified app" warning: click **Continue**. Then click **Choose calendar** and pick "Us". The other person only needs to click **Connect** on their device; the calendar choice is shared.
+5. In the app, click 📅, then **Connect Google Calendar**. Google shows an "unverified app" warning: click **Continue**.
+6. One of you clicks **Create the Syzygy calendar**. Then, in Google Calendar: **Settings → "Syzygy" → Share with specific people**, add the other person with **Make changes to events**. They accept Google's email and click **Connect** in the app on their device; the calendar is already set for both.
 
-Google's sign-in lasts about an hour. When it has run out, the 📅 button says **Reconnect**. Saving a plan reconnects automatically, which may show a quick popup.
+Google's sign-in lasts about an hour. Saving a plan renews it (a small window may flash and close by itself); otherwise the 📅 button says **Reconnect**.

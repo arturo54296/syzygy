@@ -1,6 +1,6 @@
-import { openStore, makeKey } from './store.js?v=24';
-import { SEED, SEED_VERSION } from './activities.js?v=24';
-import * as G from './gcal.js?v=24';
+import { openStore, makeKey } from './store.js?v=25';
+import { SEED, SEED_VERSION } from './activities.js?v=25';
+import * as G from './gcal.js?v=25';
 
 const MIN = 60e3, HOUR = 36e5, DAY = 864e5, SNAP = 15 * MIN;
 const PEOPLE = { arturo: { name: 'Arturo', css: '--arturo' }, zosia: { name: 'Zosia', css: '--zosia' } };
@@ -985,19 +985,12 @@ function gPoke() {
   // also renew when <10 min are left, so the sync that follows this click doesn't run into an expired pass
   if (G.hasClient && G.ready() && G.wanted() && gSettings().gcalId && (!G.isValid() || G.expiresWithin(10 * MIN))) G.requestToken('');
 }
-// safety: never sync into someone's main (primary) calendar; checked once per calendar per session
-const safeTargets = {};
-async function isSafeTarget(cal) {
-  if (cal in safeTargets) return safeTargets[cal];
-  try { const c = await G.api('GET', `/users/me/calendarList/${encodeURIComponent(cal)}`); return (safeTargets[cal] = !c.primary); }
-  catch (e) { if (e.code === 'auth') throw e; return false; }   // not in my list = I can't write there anyway
-}
+// Syzygy may only write to the calendar it created itself (gcalMade); Google refuses every other one anyway,
+// so a calendar picked by an older version ("Us") is not synced any more until the Syzygy calendar is created.
 async function gSync() {
-  const cal = gSettings().gcalId;
+  const s = gSettings(), cal = s.gcalId;
   if (!G.hasClient || !cal || !G.isValid()) return;
-  let safe = false;
-  try { safe = cal !== 'primary' && await isSafeTarget(cal); } catch { gStatus = 'Google sign-in expired: click 📅 to reconnect'; renderGBtn(); return; }
-  if (!safe) { gStatus = 'Not syncing: choose a shared calendar, not your main one (📅)'; renderGBtn(); return; }
+  if (!s.gcalMade || cal === 'primary') { gStatus = 'Not syncing: open 📅 and create the Syzygy calendar'; renderGBtn(); return; }
   if (gBusyNow) { gAgain = true; return; }
   gBusyNow = true; renderGBtn();
   const C = `/calendars/${encodeURIComponent(cal)}/events`;
@@ -1024,7 +1017,9 @@ async function gSync() {
     gStatus = n ? `Synced ${n} change${n > 1 ? 's' : ''} to Google` : 'Google Calendar up to date';
   } catch (e) {
     console.error(e);
-    gStatus = e.code === 'auth' ? 'Google sign-in expired: click 📅 to reconnect' : 'Google sync error: ' + e.message;
+    gStatus = e.code === 'auth' ? 'Google sign-in expired: click 📅 to reconnect'
+      : [403, 404].includes(e.status) ? `Can’t write to “${s.gcalName || 'Syzygy'}”: has it been shared with you (“Make changes to events”)? See 📅`
+      : 'Google sync error: ' + e.message;
     if (e.code !== 'auth') toast(gStatus);
   } finally {
     gBusyNow = false; renderGBtn();
@@ -1058,7 +1053,7 @@ function renderGBtn() {
   b.textContent = gBusyNow ? '📅 …' : needs ? '📅 Reconnect' : '📅';
   b.classList.toggle('warn', needs);
   b.title = !G.hasClient ? 'Google Calendar (not set up)' : needs ? 'Google sign-in expired: click to reconnect' :
-    ok ? `Google Calendar${cal ? ': ' + (gSettings().gcalName || cal) : ' (choose a calendar)'}${gStatus ? '\n' + gStatus : ''}` : 'Connect Google Calendar';
+    ok ? `Google Calendar${cal ? ': ' + (gSettings().gcalName || cal) : ' (no Syzygy calendar yet)'}${gStatus ? '\n' + gStatus : ''}` : 'Connect Google Calendar';
 }
 
 function gcalDialog() {
@@ -1067,33 +1062,34 @@ function gcalDialog() {
     el('p', { class: 'hint' }, 'See “Google Calendar sync” in README.md.'),
   ]);
   const s = gSettings(), ok = G.isValid();
-  const pickBox = el('div', {});
   const busyCb = el('input', { type: 'checkbox', checked: showBusy(), onchange: e => { LS.set('gbusy', e.target.checked); busy.key = ''; render(); } });
-  const choose = async () => {
-    pickBox.replaceChildren(el('p', { class: 'hint' }, 'Loading your calendars…'));
+  // Syzygy can only write to a calendar it created itself, so it makes one; the creator shares it by hand once.
+  const create = async btn => {
+    if (s.gcalMade && !confirm(`Make a new “Syzygy” calendar? Plans stop going to the current one (${s.gcalOwner || 'its owner'}’s), and it has to be shared again.`)) return;
+    btn.disabled = true;
     try {
-      const r = await G.api('GET', '/users/me/calendarList', null, { minAccessRole: 'writer' });
-      const items = (r.items || []).filter(c => !c.primary).sort((a, b) => a.summary.localeCompare(b.summary));   // your main calendar is never offered
-      if (!items.length) return pickBox.replaceChildren(el('p', {}, 'No shared calendar found. Create “Us” in Google Calendar first (see below), then try again.'));
-      const sel = el('select', {}, items.map(c => el('option', { value: c.id, selected: c.id === s.gcalId }, c.summaryOverride || c.summary + (c.primary ? ' (your main calendar)' : ''))));
-      pickBox.replaceChildren(el('div', { class: 'row' }, sel, el('button', { class: 'primary', onclick: async () => {
-        const c = items.find(x => x.id === sel.value);
-        await store.put('meta', { ...gSettings(), id: 'settings', gcalId: c.id, gcalName: c.summaryOverride || c.summary });
-        toast(`Plans will go to “${c.summaryOverride || c.summary}”`); close(); gSchedule();
-      } }, 'Use this calendar')),
-        el('p', { class: 'hint' }, 'Pick the calendar you both share (e.g. “Us”). Don’t see it? Create it in Google Calendar and share it with the other person (“Make changes to events”), then reload.'));
-    } catch (e) { pickBox.replaceChildren(el('p', {}, 'Could not load your calendars: ' + e.message)); }
+      const c = await G.api('POST', '/calendars', { summary: 'Syzygy', description: 'Plans from the Syzygy app. Edit them in the app: changes made here are overwritten.', timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone });
+      await store.put('meta', { ...gSettings(), id: 'settings', gcalId: c.id, gcalName: 'Syzygy', gcalMade: true, gcalOwner: G.account() || '' });
+      toast('Created “Syzygy” in your Google Calendar. Now share it with the other person (see 📅).'); close(); gSchedule();
+    } catch (e) { btn.disabled = false; toast('Could not create the calendar: ' + e.message); }
   };
+  const mine = s.gcalMade && s.gcalOwner && s.gcalOwner === G.account();
+  const calInfo = !s.gcalId ? [el('p', {}, 'No Syzygy calendar yet. One of you creates it (once), then shares it with the other.')]
+    : !s.gcalMade ? [el('p', {}, `Plans used to go to “${s.gcalName || s.gcalId}”. Syzygy now only has access to a calendar it creates itself, so create the Syzygy calendar. You can delete “${s.gcalName || 'the old calendar'}” afterwards in Google Calendar.`)]
+    : [el('p', {}, `All plans (proposed and confirmed) go to “Syzygy”${s.gcalOwner ? `, created by ${s.gcalOwner}` : ''}.`),
+       el('p', { class: 'hint' }, mine
+         ? 'Share it once: in Google Calendar, Settings → “Syzygy” → Share with specific people → add the other person with “Make changes to events”.'
+         : 'If syncing fails here, ask the creator to share “Syzygy” with you (“Make changes to events”) and accept the email from Google.')];
   dialog('📅 Google Calendar', [
     el('p', {}, ok ? '✓ Connected on this device.' : G.wanted() ? 'Sign-in expired on this device.' : 'Not connected on this device.'),
     el('div', { class: 'row' },
       ok ? null : el('button', { class: 'primary', onclick: () => { close(); G.requestToken(G.wanted() ? '' : 'consent'); } }, G.wanted() ? 'Reconnect' : 'Connect Google Calendar'),
       ok ? el('button', { onclick: () => { gSync(); close(); toast('Syncing…'); } }, 'Sync now') : null,
       G.wanted() ? el('button', { class: 'danger', onclick: () => { G.disconnect(); busy = { key: '', at: 0, list: [] }; close(); render(); } }, 'Disconnect this device') : null),
-    el('section', {}, el('h3', {}, 'Shared calendar'),
-      el('p', {}, s.gcalId ? `All plans (proposed and confirmed) go to “${s.gcalName || s.gcalId}”.` : 'No calendar chosen yet.'),
-      ok ? el('button', { onclick: choose }, s.gcalId ? 'Change calendar' : 'Choose calendar') : el('p', { class: 'hint' }, 'Connect first to choose one.'),
-      pickBox),
+    el('section', {}, el('h3', {}, 'Shared calendar'), ...calInfo,
+      ok ? (s.gcalMade ? null : el('button', { class: 'primary', onclick: e => create(e.currentTarget) }, 'Create the Syzygy calendar'))
+        : el('p', { class: 'hint' }, 'Connect first.'),
+      ok && s.gcalMade ? el('button', { onclick: e => create(e.currentTarget) }, 'Make a new Syzygy calendar') : null),
     el('section', {}, el('h3', {}, 'On this device'),
       el('label', {}, busyCb, ' Show my Google busy times (grey, only you see them)')),
     gStatus ? el('p', { class: 'hint' }, gStatus) : null,
@@ -1181,7 +1177,8 @@ async function boot(fresh = false) {
   store.del = (c, id) => { if (c === 'events') gPoke(); return rawDel(c, id); };
   G.onToken((tok, err) => {
     if (err) {
-      gStatus = err === 'popup_closed' ? 'Sign-in window closed'
+      gStatus = err === 'upgraded' ? 'Syzygy now asks Google for less access. Click 📅 Reconnect once: Google should list only “secondary calendars” and “availability”.'
+        : err === 'popup_closed' ? 'Sign-in window closed'
         : err === 'popup_failed_to_open' ? 'Your browser blocked Google’s sign-in window: allow pop-ups for this site, then click 📅 Reconnect'
         : 'Google sign-in failed: ' + err;
       renderGBtn(); toast(gStatus); return;
