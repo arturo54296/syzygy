@@ -1,6 +1,6 @@
-import { openStore, makeKey } from './store.js?v=25';
-import { SEED, SEED_VERSION } from './activities.js?v=25';
-import * as G from './gcal.js?v=25';
+import { openStore, makeKey } from './store.js?v=26';
+import { SEED, SEED_VERSION } from './activities.js?v=26';
+import * as G from './gcal.js?v=26';
 
 const MIN = 60e3, HOUR = 36e5, DAY = 864e5, SNAP = 15 * MIN;
 const PEOPLE = { arturo: { name: 'Arturo', css: '--arturo' }, zosia: { name: 'Zosia', css: '--zosia' } };
@@ -1143,7 +1143,8 @@ function lockScreen(reason) {
     el('p', {}, el('b', {}, 'Ask Arturo for the link.')))));
 }
 async function boot(fresh = false) {
-  const fromHash = (location.hash.match(/k=([a-z0-9]+)/i) || [])[1];
+  // keys are lowercase only: undo an iPhone/keyboard auto-capital ("Bsa4…") instead of calling the key wrong
+  const fromHash = (location.hash.match(/k=([a-z0-9]+)/i) || [])[1]?.toLowerCase();
   const key = fromHash || LS.get('key', null);   // a device that opened the full link once remembers its key
   // Creating a new calendar is switched OFF on purpose: there is one shared calendar (ours) and we'll never need
   // another. The code is kept in case that ever changes; to turn it back on, set ALLOW_NEW_CALENDAR to true

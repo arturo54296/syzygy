@@ -1,6 +1,6 @@
 // Data layer. Firestore when config.js has a config, otherwise a demo store in localStorage
 // (synced live between tabs of the same browser, handy for testing both people side by side).
-import { firebaseConfig } from './config.js?v=25';
+import { firebaseConfig } from './config.js?v=26';
 
 const FIREBASE_VERSION = '10.12.2';
 const COLLS = ['events', 'activities', 'meta'];   // meta: shared settings (e.g. the Google calendar) and sync state
@@ -55,7 +55,12 @@ export async function openStore(key, onData, onError) {
   return {
     mode: 'live',
     /** Is there a calendar under this key? (every real one has meta/seed, written when it was created) */
-    exists: async () => { try { return (await F.getDoc(ref('meta', 'seed'))).exists(); } catch { return null; } },   // null = couldn't check (offline)
+    // Ask the server, not this device's cache: a stale or broken cache (seen on iPhone Safari) must never make a
+    // real key look wrong. Only a definite "not there" from the server locks; anything unclear = null = trust it.
+    exists: async () => {
+      try { return (await F.getDocFromServer(ref('meta', 'seed'))).exists(); }
+      catch { try { return (await F.getDoc(ref('meta', 'seed'))).exists() || null; } catch { return null; } }
+    },
     start: () => {
       for (const c of COLLS) F.onSnapshot(F.collection(db, 'spaces', key, c), snap => {
         data[c] = snap.docs.map(d => ({ ...d.data(), id: d.id })); ready[c] = true; emit();
