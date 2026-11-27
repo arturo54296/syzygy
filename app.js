@@ -1,6 +1,6 @@
-import { openStore, makeKey } from './store.js?v=26';
-import { SEED, SEED_VERSION } from './activities.js?v=26';
-import * as G from './gcal.js?v=26';
+import { openStore, makeKey } from './store.js?v=27';
+import { SEED, SEED_VERSION } from './activities.js?v=27';
+import * as G from './gcal.js?v=27';
 
 const MIN = 60e3, HOUR = 36e5, DAY = 864e5, SNAP = 15 * MIN;
 const PEOPLE = { arturo: { name: 'Arturo', css: '--arturo' }, zosia: { name: 'Zosia', css: '--zosia' } };
@@ -924,7 +924,8 @@ function statsDialog() {
 }
 
 function shareDialog(fresh = false) {
-  const url = location.href;
+  // ?k= survives apps that cut the part after #; the app moves the key back behind # as soon as it opens
+  const url = location.origin + location.pathname + '?k=' + (LS.get('key', null) || '');
   const inp = el('input', { type: 'text', value: url, readonly: true });
   dialog('🔗 Your shared link', [
     fresh ? el('p', {}, 'Your shared calendar is ready! ') : null,
@@ -1139,12 +1140,13 @@ function lockScreen(reason) {
   document.body.replaceChildren(el('div', { class: 'lock' }, el('div', { class: 'lockbox' },
     el('div', { class: 'big' }, '🔒'),
     el('h2', {}, reason),
-    el('p', {}, 'This calendar only opens with its full link, which includes a secret key (the part after “#k=”).'),
+    el('p', {}, 'This calendar only opens with its full link, which includes a secret key (the part after “k=”).'),
     el('p', {}, el('b', {}, 'Ask Arturo for the link.')))));
 }
 async function boot(fresh = false) {
   // keys are lowercase only: undo an iPhone/keyboard auto-capital ("Bsa4…") instead of calling the key wrong
-  const fromHash = (location.hash.match(/k=([a-z0-9]+)/i) || [])[1]?.toLowerCase();
+  // The key can come as #k=… or ?k=… (some apps and iPhone Home Screen icons drop everything after #)
+  const fromHash = ((location.hash + ' ' + location.search).match(/k=([a-z0-9]+)/i) || [])[1]?.toLowerCase();
   const key = fromHash || LS.get('key', null);   // a device that opened the full link once remembers its key
   // Creating a new calendar is switched OFF on purpose: there is one shared calendar (ours) and we'll never need
   // another. The code is kept in case that ever changes; to turn it back on, set ALLOW_NEW_CALENDAR to true
@@ -1169,7 +1171,8 @@ async function boot(fresh = false) {
     store = null;
     return lockScreen(fromHash ? 'The key in this link isn’t correct.' : 'The saved key on this device isn’t correct any more.');
   }
-  if (!fromHash) history.replaceState(null, '', '#k=' + key);
+  // keep the key only after # in the address bar (the part after # never reaches any server)
+  if (location.search || location.hash !== '#k=' + key) history.replaceState(null, '', location.pathname + '#k=' + key);
   LS.set('key', key);
   setStatus(store.mode === 'demo' ? 'demo' : '', store.mode === 'demo' ? 'Demo (this browser only)' : 'Live');
   // any change to a plan from a click: if Google sign-in expired, renew it now (a popup needs a click)
